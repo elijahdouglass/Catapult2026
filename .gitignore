@@ -1,2 +1,21 @@
 test/tesseract_test.py
 test/word_sim_test.py
+
+# Dependencies
+node_modules/
+
+# Build
+dist/
+.venv/
+
+# Env
+.env
+backend/.env
+
+# Uploads
+backend/uploads/
+
+# IDE
+.vscode/
+.idea/
+*.swp
