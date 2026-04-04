@@ -7,6 +7,7 @@ import {
   memo,
 } from "react";
 import { api } from "../api/client";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 /* ── types ─────────────────────────────────────────────── */
 
@@ -20,6 +21,7 @@ interface FeedPerson {
   displayName: string;
   igUsername: string | null;
   tags: string | null;
+  worldIdVerified: boolean;
   similarityScore: number;
   reels: ReelInfo[];
 }
@@ -261,6 +263,7 @@ const ReelSlide = memo(function ReelSlide({
             {item.person.displayName.charAt(0).toUpperCase()}
           </div>
           <span style={personNameStyle}>{item.person.displayName}</span>
+          {item.person.worldIdVerified && <VerifiedBadge compact />}
         </div>
         <div style={reelBadgeStyle}>{reelLabel}</div>
       </div>
@@ -362,6 +365,7 @@ function IntroCard({ person }: { person: FeedPerson }) {
         </div>
 
         <h2 style={introNameStyle}>{person.displayName}</h2>
+        {person.worldIdVerified && <VerifiedBadge />}
 
         {tags.length > 0 && (
           <div style={introTagsStyle}>

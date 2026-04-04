@@ -1,11 +1,13 @@
 import { useState, useEffect, CSSProperties } from "react";
 import { api } from "../api/client";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 interface Match {
   userId: number;
   displayName: string;
   igUsername: string;
   tags: string;
+  worldIdVerified: boolean;
   similarityScore: number;
 }
 
@@ -64,7 +66,10 @@ export default function Matches() {
                   </span>
                 </div>
                 <div style={styles.info}>
-                  <h3 style={styles.name}>{m.displayName}</h3>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <h3 style={styles.name}>{m.displayName}</h3>
+                    {m.worldIdVerified && <VerifiedBadge compact />}
+                  </div>
                   <div style={styles.score}>
                     {m.similarityScore}% match
                   </div>

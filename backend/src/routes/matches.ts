@@ -47,6 +47,7 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       igUsername: true,
       tags: true,
       tagVector: true,
+      worldIdVerified: true,
     },
   });
 
@@ -55,6 +56,7 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
     displayName: m.displayName,
     igUsername: m.igUsername,
     tags: m.tags,
+    worldIdVerified: m.worldIdVerified,
     similarityScore:
       me.tagVector && m.tagVector
         ? Math.round(cosineSimilarity(me.tagVector, m.tagVector) * 100) || 0

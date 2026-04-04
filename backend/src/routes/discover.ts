@@ -31,6 +31,7 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       displayName: true,
       tags: true,
       tagVector: true,
+      worldIdVerified: true,
     },
   });
 
@@ -39,6 +40,7 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       userId: c.id,
       displayName: c.displayName,
       tags: c.tags,
+      worldIdVerified: c.worldIdVerified,
       similarityScore: Math.round(
         cosineSimilarity(me.tagVector!, c.tagVector!) * 100
       ),
@@ -80,6 +82,7 @@ router.get("/feed", authMiddleware, async (req: AuthRequest, res: Response) => {
       igUsername: true,
       tags: true,
       tagVector: true,
+      worldIdVerified: true,
       reelViews: {
         orderBy: { viewedAt: "desc" },
         take: 5,
@@ -97,6 +100,7 @@ router.get("/feed", authMiddleware, async (req: AuthRequest, res: Response) => {
       displayName: c.displayName,
       igUsername: c.igUsername,
       tags: c.tags,
+      worldIdVerified: c.worldIdVerified,
       similarityScore: Math.round(
         cosineSimilarity(me.tagVector!, c.tagVector!) * 100
       ),

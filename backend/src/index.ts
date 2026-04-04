@@ -9,6 +9,7 @@ import matchesRoutes from "./routes/matches";
 import reelsRoutes from "./routes/reels";
 import videoRoutes from "./routes/video";
 import webhookRoutes from "./routes/webhook";
+import worldidRoutes from "./routes/worldid";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -44,6 +45,7 @@ app.use("/api/matches", matchesRoutes);
 app.use("/api/reels", reelsRoutes);
 app.use("/api/video", videoRoutes);
 app.use("/api/webhook", webhookRoutes);
+app.use("/api/worldid", worldidRoutes);
 
 app.listen(PORT, () => {
   console.log(`Reel Rizz backend running on http://localhost:${PORT}`);

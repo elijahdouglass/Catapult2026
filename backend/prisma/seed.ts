@@ -124,6 +124,7 @@ async function main() {
         tags: u.tags,
         tagVector: new Uint8Array(tagVector.buffer as ArrayBuffer),
         onboarded: true,
+        igVerified: true,
         likeThreshold: u.likeThreshold,
       },
     });

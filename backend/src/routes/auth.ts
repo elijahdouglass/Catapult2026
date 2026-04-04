@@ -72,6 +72,7 @@ router.post(
           igUsername: user.igUsername,
           igVerified: user.igVerified,
           onboarded: user.onboarded,
+          worldIdVerified: user.worldIdVerified,
         },
       });
     } catch (error) {
@@ -129,6 +130,7 @@ router.post(
           onboarded: user.onboarded,
           igUsername: user.igUsername,
           igVerified: user.igVerified,
+          worldIdVerified: user.worldIdVerified,
         },
       });
     } catch (error) {
@@ -187,6 +189,7 @@ router.get(
           igUsername: user.igUsername,
           igVerified: user.igVerified,
           tags: user.tags,
+          worldIdVerified: user.worldIdVerified,
         },
       });
     } catch (error) {

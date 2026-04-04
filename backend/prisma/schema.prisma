@@ -20,8 +20,10 @@ model User {
   tagVector      Bytes?   @db.MediumBlob
   screenshotPath String?
   onboarded      Boolean  @default(false)
-  likeThreshold  Int      @default(3)
-  createdAt      DateTime @default(now())
+  likeThreshold    Int      @default(3)
+  worldIdVerified  Boolean  @default(false)
+  worldIdNullifier String?  @unique
+  createdAt        DateTime @default(now())
 
   likesGiven    Like[] @relation("LikerRelation")
   likesReceived Like[] @relation("LikeeRelation")
