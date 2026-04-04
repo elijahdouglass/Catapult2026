@@ -10,8 +10,9 @@ datasource db {
 model User {
   id             Int      @id @default(autoincrement())
   email          String   @unique
-  passwordHash   String
+  passwordHash   String?
   displayName    String
+  igUserId       String?  @unique
   igUsername      String?
   tags           String?  @db.Text
   tagVector      Bytes?   @db.MediumBlob

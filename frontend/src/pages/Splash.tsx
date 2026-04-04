@@ -91,6 +91,10 @@ export default function Splash() {
         </div>
       </div>
 
+			<div>
+			<p style={styles.subtitle}>Don’t have enough love in your life? Don’t have enough doomscrolling in your life? Well… <br></br><br></br><b>Reel Rizz</b> is the solution to both of these problems. You’ll match with other users based on your shared taste in <s>brainrot memes</s> transformative short form video content. Like enough of their reels, (and if they like enough of yours), then soon you’ll be able to scroll together, forever.</p>
+			</div>
+
       {/* How it works */}
       <div style={styles.steps}>
         <h2 style={styles.stepsTitle}>how it works</h2>
