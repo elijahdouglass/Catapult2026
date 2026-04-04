@@ -1,0 +1,11 @@
+[project]
+name = "reel-rizz"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "pillow",
+    "pytesseract",
+    "sentence-transformers",
+    "scikit-learn",
+]

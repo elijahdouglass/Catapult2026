@@ -1,0 +1,263 @@
+import { useState, CSSProperties, FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+
+export default function Auth() {
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login, register } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      if (mode === "login") {
+        await login(email, password);
+        navigate("/discover");
+      } else {
+        await register(email, password, displayName);
+        navigate("/onboarding");
+      }
+    } catch (err: any) {
+      setError(err.message || "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={styles.wrapper}>
+      <div style={styles.container}>
+        <div style={styles.logoRow}>
+          <img src="/assets/logo.webp" alt="Reel Rizz" style={styles.logo} />
+        </div>
+
+        <h1 style={styles.title}>
+          {mode === "login" ? "Welcome back" : "Join the vibe"}
+        </h1>
+        <p style={styles.subtitle}>
+          {mode === "login"
+            ? "Sign in to find your match"
+            : "Create your account and start matching"}
+        </p>
+
+        {/* Mode toggle */}
+        <div style={styles.toggle}>
+          <button
+            style={{
+              ...styles.toggleBtn,
+              ...(mode === "login" ? styles.toggleBtnActive : {}),
+            }}
+            onClick={() => {
+              setMode("login");
+              setError("");
+            }}
+          >
+            Sign in
+          </button>
+          <button
+            style={{
+              ...styles.toggleBtn,
+              ...(mode === "register" ? styles.toggleBtnActive : {}),
+            }}
+            onClick={() => {
+              setMode("register");
+              setError("");
+            }}
+          >
+            Register
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={styles.form}>
+          {mode === "register" && (
+            <div style={styles.field}>
+              <label style={styles.label}>Display name</label>
+              <input
+                className="input"
+                type="text"
+                placeholder="Your name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                required
+              />
+            </div>
+          )}
+
+          <div style={styles.field}>
+            <label style={styles.label}>Email</label>
+            <input
+              className="input"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div style={styles.field}>
+            <label style={styles.label}>Password</label>
+            <input
+              className="input"
+              type="password"
+              placeholder="At least 6 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+            />
+          </div>
+
+          {error && <p style={styles.error}>{error}</p>}
+
+          <button
+            type="submit"
+            className="btn btn-primary"
+            style={{ width: "100%", marginTop: 8 }}
+            disabled={loading}
+          >
+            {loading ? (
+              <span className="spinner" style={{ width: 20, height: 20 }} />
+            ) : mode === "login" ? (
+              "Sign in"
+            ) : (
+              "Create account"
+            )}
+          </button>
+        </form>
+
+        <p style={styles.switchText}>
+          {mode === "login" ? "Don't have an account? " : "Already have an account? "}
+          <button
+            style={styles.switchBtn}
+            onClick={() => {
+              setMode(mode === "login" ? "register" : "login");
+              setError("");
+            }}
+          >
+            {mode === "login" ? "Register" : "Sign in"}
+          </button>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+const styles: Record<string, CSSProperties> = {
+  wrapper: {
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "40px 20px",
+  },
+  container: {
+    width: "100%",
+    maxWidth: 420,
+    background: "var(--surface-card)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-xl)",
+    padding: "40px 36px",
+    backdropFilter: "blur(24px)",
+    boxShadow: "var(--shadow-lg)",
+    animation: "scaleIn 0.5s var(--ease-out-expo) both",
+  },
+  logoRow: {
+    display: "flex",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  logo: {
+    width: 64,
+    height: 64,
+    objectFit: "contain" as const,
+  },
+  title: {
+    fontSize: "1.6rem",
+    fontWeight: 700,
+    textAlign: "center" as const,
+    color: "var(--text-primary)",
+    letterSpacing: "-0.02em",
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: "0.9rem",
+    color: "var(--text-muted)",
+    textAlign: "center" as const,
+    marginBottom: 24,
+  },
+  toggle: {
+    display: "flex",
+    background: "rgba(232, 67, 111, 0.06)",
+    borderRadius: "var(--radius-full)",
+    padding: 3,
+    marginBottom: 24,
+  },
+  toggleBtn: {
+    flex: 1,
+    padding: "10px",
+    borderRadius: "var(--radius-full)",
+    border: "none",
+    background: "transparent",
+    fontFamily: "var(--font-body)",
+    fontSize: "0.88rem",
+    fontWeight: 500,
+    color: "var(--text-muted)",
+    cursor: "pointer",
+    transition: "all 0.25s ease",
+  },
+  toggleBtnActive: {
+    background: "white",
+    color: "var(--rose-600)",
+    fontWeight: 600,
+    boxShadow: "var(--shadow-sm)",
+  },
+  form: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "16px",
+  },
+  field: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "6px",
+  },
+  label: {
+    fontSize: "0.82rem",
+    fontWeight: 600,
+    color: "var(--text-secondary)",
+    paddingLeft: 2,
+  },
+  error: {
+    fontSize: "0.85rem",
+    color: "var(--coral)",
+    background: "rgba(255, 107, 107, 0.08)",
+    border: "1px solid rgba(255, 107, 107, 0.2)",
+    borderRadius: "var(--radius-sm)",
+    padding: "10px 14px",
+    textAlign: "center" as const,
+  },
+  switchText: {
+    fontSize: "0.85rem",
+    color: "var(--text-muted)",
+    textAlign: "center" as const,
+    marginTop: 20,
+  },
+  switchBtn: {
+    background: "none",
+    border: "none",
+    color: "var(--rose-500)",
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "var(--font-body)",
+    fontSize: "0.85rem",
+  },
+};

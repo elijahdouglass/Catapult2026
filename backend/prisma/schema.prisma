@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int      @id @default(autoincrement())
+  email          String   @unique
+  passwordHash   String
+  displayName    String
+  igUsername      String?
+  tags           String?  @db.Text
+  tagVector      Bytes?   @db.MediumBlob
+  screenshotPath String?
+  onboarded      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  likesGiven    Like[] @relation("LikerRelation")
+  likesReceived Like[] @relation("LikeeRelation")
+  reelViews     ReelView[]
+}
+
+model Like {
+  id        Int      @id @default(autoincrement())
+  likerId   Int
+  likeeId   Int
+  createdAt DateTime @default(now())
+
+  liker User @relation("LikerRelation", fields: [likerId], references: [id], onDelete: Cascade)
+  likee User @relation("LikeeRelation", fields: [likeeId], references: [id], onDelete: Cascade)
+
+  @@unique([likerId, likeeId])
+  @@index([likeeId])
+}

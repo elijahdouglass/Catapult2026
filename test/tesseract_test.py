@@ -3,7 +3,7 @@ import numpy as np
 import pytesseract
 from PIL import Image
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# tesseract_cmd not set — uses PATH (brew install tesseract on macOS)
 
 
 def _find_bubble_bboxes(image, brightness_threshold=30, min_area=500):
