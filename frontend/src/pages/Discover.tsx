@@ -42,7 +42,12 @@ interface ReelLikeResponse {
 
 interface VideoResponse {
   status: string;
-  data: { videoUrl: string };
+  data: { videoUrl: string; audioUrl?: string };
+}
+
+interface ResolvedVideo {
+  videoUrl: string;
+  audioUrl?: string;
 }
 
 type FeedItem =
@@ -115,17 +120,18 @@ function injectStyles() {
 const NAV_H = 60;
 /* ── video cache ───────────────────────────────────────── */
 
-const videoUrlCache = new Map<string, string>();
+const videoCache = new Map<string, ResolvedVideo>();
 
-async function fetchVideoUrl(
+async function fetchVideo(
   reelId: string,
   directUrl: string | null
-): Promise<string | null> {
-  if (videoUrlCache.has(reelId)) return videoUrlCache.get(reelId)!;
+): Promise<ResolvedVideo | null> {
+  if (videoCache.has(reelId)) return videoCache.get(reelId)!;
   // Use direct CDN URL from webhook if available
   if (directUrl) {
-    videoUrlCache.set(reelId, directUrl);
-    return directUrl;
+    const resolved: ResolvedVideo = { videoUrl: directUrl };
+    videoCache.set(reelId, resolved);
+    return resolved;
   }
   // Otherwise resolve via Instagram proxy (shortcode-based reels from extension)
   try {
@@ -135,8 +141,12 @@ async function fetchVideoUrl(
       )}`
     );
     if (json.status === "success" && json.data?.videoUrl) {
-      videoUrlCache.set(reelId, json.data.videoUrl);
-      return json.data.videoUrl;
+      const resolved: ResolvedVideo = {
+        videoUrl: json.data.videoUrl,
+        audioUrl: json.data.audioUrl,
+      };
+      videoCache.set(reelId, resolved);
+      return resolved;
     }
   } catch {
     /* swallow */
@@ -163,21 +173,24 @@ const ReelSlide = memo(function ReelSlide({
   onUnlike: (reelId: string, ownerId: number) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [bursting, setBursting] = useState(false);
   const [particles, setParticles] = useState<
     { id: number; dx: string; dy: string; delay: string; size: number }[]
   >([]);
 
-  // fetch video url
+  // fetch video + audio urls
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchVideoUrl(item.reelId, item.videoUrl).then((url) => {
+    fetchVideo(item.reelId, item.videoUrl).then((resolved) => {
       if (!cancelled) {
-        setVideoUrl(url);
+        setVideoUrl(resolved?.videoUrl ?? null);
+        setAudioUrl(resolved?.audioUrl);
         setLoading(false);
       }
     });
@@ -185,6 +198,34 @@ const ReelSlide = memo(function ReelSlide({
       cancelled = true;
     };
   }, [item.reelId]);
+
+  // sync audio with video playback
+  useEffect(() => {
+    const vid = videoRef.current;
+    const aud = audioRef.current;
+    if (!vid || !aud) return;
+
+    const syncAudio = () => {
+      if (Math.abs(vid.currentTime - aud.currentTime) > 0.3) {
+        aud.currentTime = vid.currentTime;
+      }
+    };
+    const onPlay = () => { aud.currentTime = vid.currentTime; aud.play().catch(() => {}); };
+    const onPause = () => { aud.pause(); };
+    const onSeeked = () => { aud.currentTime = vid.currentTime; };
+
+    vid.addEventListener("play", onPlay);
+    vid.addEventListener("pause", onPause);
+    vid.addEventListener("seeked", onSeeked);
+    vid.addEventListener("timeupdate", syncAudio);
+
+    return () => {
+      vid.removeEventListener("play", onPlay);
+      vid.removeEventListener("pause", onPause);
+      vid.removeEventListener("seeked", onSeeked);
+      vid.removeEventListener("timeupdate", syncAudio);
+    };
+  }, [audioUrl, videoUrl]);
 
   // intersection observer for autoplay
   useEffect(() => {
@@ -235,15 +276,20 @@ const ReelSlide = memo(function ReelSlide({
       {loading ? (
         <div style={shimmerStyle} />
       ) : videoUrl ? (
-        <video
-          ref={videoRef}
-          src={videoUrl}
-          style={videoStyle}
-          loop
-          muted
-          playsInline
-          preload="auto"
-        />
+        <>
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            style={videoStyle}
+            loop
+            muted
+            playsInline
+            preload="auto"
+          />
+          {audioUrl && (
+            <audio ref={audioRef} src={audioUrl} loop preload="auto" />
+          )}
+        </>
       ) : (
         <div style={errorSlideStyle}>
           <span style={{ fontSize: "2.5rem", marginBottom: 12 }}>&#x1F4F9;</span>
