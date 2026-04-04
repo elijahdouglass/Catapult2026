@@ -70,11 +70,14 @@ router.get("/feed", authMiddleware, async (req: AuthRequest, res: Response) => {
     })
   ).map((l) => l.likeeId);
 
+  const verifiedOnly = req.query.verifiedOnly === "true";
+
   const candidates = await prisma.user.findMany({
     where: {
       onboarded: true,
       id: { notIn: [me.id, ...likedIds] },
       tagVector: { not: null },
+      ...(verifiedOnly ? { worldIdVerified: true } : {}),
     },
     select: {
       id: true,

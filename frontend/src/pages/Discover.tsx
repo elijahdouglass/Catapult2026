@@ -498,6 +498,7 @@ export default function Discover() {
     new Map()
   );
   const [loading, setLoading] = useState(true);
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [matchPopup, setMatchPopup] = useState<{
     displayName: string;
     igUsername: string;
@@ -514,8 +515,11 @@ export default function Discover() {
 
   // load feed
   useEffect(() => {
+    setLoading(true);
+    setCurrentIndex(0);
+    const qs = verifiedOnly ? "?verifiedOnly=true" : "";
     api
-      .get<FeedResponse>("/discover/feed")
+      .get<FeedResponse>(`/discover/feed${qs}`)
       .then((data) => {
         setFeed(data.feed);
         setLikedReelIds(new Set(data.likedReelIds));
@@ -533,7 +537,7 @@ export default function Discover() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [verifiedOnly]);
 
   // build flat feed items
   const items: FeedItem[] = [];
@@ -729,6 +733,30 @@ export default function Discover() {
   return (
     <>
       <div ref={scrollRef} className="dr-scroll-container" style={scrollContainerStyle}>
+        {/* Verified filter toggle */}
+        <button
+          onClick={() => setVerifiedOnly((v) => !v)}
+          style={{
+            ...filterBtnStyle,
+            ...(verifiedOnly ? filterBtnActiveStyle : {}),
+          }}
+          aria-label="Filter by verified humans"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </svg>
+          Verified Only
+        </button>
         <div
           style={{
             transform: `translateY(calc(-${currentIndex} * (100vh - ${NAV_H}px)))`,
@@ -773,6 +801,33 @@ export default function Discover() {
 }
 
 /* ── styles ────────────────────────────────────────────── */
+
+const filterBtnStyle: CSSProperties = {
+  position: "absolute",
+  top: 16,
+  left: "50%",
+  transform: "translateX(-50%)",
+  zIndex: 20,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "8px 16px",
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,.15)",
+  background: "rgba(0,0,0,.55)",
+  backdropFilter: "blur(12px)",
+  color: "rgba(255,255,255,.7)",
+  fontSize: ".8rem",
+  fontWeight: 600,
+  cursor: "pointer",
+  transition: "all .25s ease",
+};
+
+const filterBtnActiveStyle: CSSProperties = {
+  background: "rgba(34,197,94,.2)",
+  borderColor: "#22c55e",
+  color: "#22c55e",
+};
 
 const vh = `calc(100vh - ${NAV_H}px)`;
 

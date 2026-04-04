@@ -8,7 +8,6 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [igUsername, setIgUsername] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -33,7 +32,7 @@ export default function Onboarding() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!file || !igUsername) return;
+    if (!file) return;
 
     setError("");
     setLoading(true);
@@ -41,7 +40,6 @@ export default function Onboarding() {
     try {
       const formData = new FormData();
       formData.append("screenshot", file);
-      formData.append("igUsername", igUsername);
 
       const data = await api.post<{ tags: string[] }>("/onboarding", formData);
       setTags(data.tags);
@@ -139,35 +137,18 @@ export default function Onboarding() {
             )}
           </div>
 
-          {/* IG username */}
-          <div style={styles.field}>
-            <label style={styles.label}>Instagram username</label>
-            <div style={styles.igInputWrap}>
-              <span style={styles.igAt}>@</span>
-              <input
-                className="input"
-                type="text"
-                placeholder="yourusername"
-                value={igUsername}
-                onChange={(e) => setIgUsername(e.target.value)}
-                required
-                style={{ paddingLeft: 36 }}
-              />
-            </div>
-          </div>
-
           {error && <p style={styles.error}>{error}</p>}
 
           <button
             type="submit"
             className="btn btn-primary"
             style={{ width: "100%" }}
-            disabled={loading || !file || !igUsername}
+            disabled={loading || !file}
           >
             {loading ? (
               <>
                 <span className="spinner" style={{ width: 20, height: 20 }} />
-                Reading your vibes...
+                Reading your vibes... (may take awhile)
               </>
             ) : (
               "Analyze my feed"

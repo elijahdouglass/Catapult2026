@@ -33,17 +33,6 @@ router.post(
   authMiddleware,
   upload.single("screenshot"),
   async (req: AuthRequest, res: Response) => {
-    const { igUsername } = req.body;
-    if (
-      !igUsername ||
-      typeof igUsername !== "string" ||
-      !/^[a-zA-Z0-9._]{1,30}$/.test(igUsername)
-    ) {
-      res
-        .status(400)
-        .json({ error: "Valid Instagram username is required (letters, numbers, periods, underscores)" });
-      return;
-    }
     if (!req.file) {
       res.status(400).json({ error: "Screenshot is required" });
       return;
@@ -60,7 +49,6 @@ router.post(
       const user = await prisma.user.update({
         where: { id: req.userId! },
         data: {
-          igUsername,
           tags: tagList.join(", "),
           tagVector: new Uint8Array(tagVector.buffer as ArrayBuffer),
           screenshotPath: req.file.filename,
