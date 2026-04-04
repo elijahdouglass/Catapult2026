@@ -2,6 +2,8 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { CSSProperties, useState, useEffect, useRef } from "react";
+import VerifiedBadge from "./VerifiedBadge";
+import WorldIdVerify from "./WorldIdVerify";
 
 const MOBILE_BP = 640;
 
@@ -123,6 +125,27 @@ const styles: Record<string, CSSProperties> = {
     textDecoration: "none",
     transition: "all 0.2s ease",
   },
+  verifyBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "8px 16px",
+    borderRadius: "var(--radius-full)",
+    fontSize: "0.85rem",
+    fontWeight: 600,
+    color: "#22c55e",
+    background: "rgba(34, 197, 94, 0.08)",
+    border: "1px solid rgba(34, 197, 94, 0.2)",
+    cursor: "pointer",
+    fontFamily: "var(--font-body)",
+    transition: "all 0.25s ease",
+    marginLeft: 4,
+  },
+  verifiedIndicator: {
+    display: "flex",
+    alignItems: "center",
+    marginLeft: 4,
+  },
   dropdownDivider: {
     height: 1,
     background: "var(--border-subtle)",
@@ -141,11 +164,12 @@ sheet.textContent = `
 document.head.appendChild(sheet);
 
 export default function Navbar() {
-  const { logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [mobile, setMobile] = useState(window.innerWidth < MOBILE_BP);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [verifyOpen, setVerifyOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -199,6 +223,22 @@ export default function Navbar() {
       >
         Matches
       </NavLink>
+      {user?.worldIdVerified ? (
+        <span style={styles.verifiedIndicator}>
+          <VerifiedBadge compact />
+        </span>
+      ) : (
+        <button
+          style={styles.verifyBtn}
+          onClick={() => setVerifyOpen(true)}
+          title="Verify with World ID"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+          Verify
+        </button>
+      )}
       <button
         style={styles.themeBtn}
         onClick={toggleTheme}
@@ -280,6 +320,42 @@ export default function Navbar() {
           >
             Matches
           </NavLink>
+          {user?.worldIdVerified ? (
+            <div
+              style={{
+                ...styles.dropdownLink,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <VerifiedBadge />
+            </div>
+          ) : (
+            <button
+              style={{
+                ...styles.dropdownLink,
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                textAlign: "left",
+                fontFamily: "var(--font-body)",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                color: "#22c55e",
+              }}
+              onClick={() => {
+                setVerifyOpen(true);
+                setMenuOpen(false);
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              Verify with World ID
+            </button>
+          )}
           <div style={styles.dropdownDivider} />
           <button
             style={{
@@ -330,6 +406,15 @@ export default function Navbar() {
       </a>
 
       {mobile ? mobileMenu : <div style={styles.links}>{navLinks}</div>}
+
+      <WorldIdVerify
+        open={verifyOpen}
+        onClose={() => setVerifyOpen(false)}
+        onVerified={() => {
+          refreshUser();
+          setVerifyOpen(false);
+        }}
+      />
     </nav>
   );
 }

@@ -15,6 +15,7 @@ interface User {
   igUsername?: string;
   igVerified?: boolean;
   tags?: string;
+  worldIdVerified: boolean;
 }
 
 interface AuthContextType {
