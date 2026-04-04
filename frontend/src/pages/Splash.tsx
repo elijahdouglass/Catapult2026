@@ -68,32 +68,30 @@ export default function Splash() {
           <span style={styles.headlineAccent}>the reels you love</span>
         </h1>
 
-        <p style={styles.subtitle}>
-          We read your Instagram interests, find people with similar taste
-          using AI, then let you vibe-check each other's reels.
-          Like enough of theirs, they like enough of yours &mdash; it's a match.
-        </p>
+				<p style={styles.subtitle}>Don’t have enough love in your life? Don’t have enough doomscrolling in your life? Well… <br></br><br></br><b>Reel Rizz</b> is the solution to both of these problems. You’ll match with other users based on your shared taste in <s>brainrot memes</s> transformative short form video content. Like enough of their reels, (and if they like enough of yours), then soon you’ll be able to scroll together, forever.</p>
+					{/* <p style={styles.subtitle}>
+           We read your Instagram interests, find people with similar taste
+           using AI, then let you vibe-check each other's reels.
+           Like enough of theirs, they like enough of yours &mdash; it's a match.
+         </p> */}
 
         <div style={styles.ctas}>
           <button
             className="btn btn-primary"
             style={{ padding: "14px 36px", fontSize: "1rem" }}
-            onClick={() => navigate("/auth")}
+            onClick={() => navigate("/auth?mode=register")}
           >
             Get started
           </button>
           <button
             className="btn btn-secondary"
-            onClick={() => navigate("/auth")}
+            onClick={() => navigate("/auth?mode=login")}
           >
             I have an account
           </button>
         </div>
       </div>
 
-			<div>
-			<p style={styles.subtitle}>Don’t have enough love in your life? Don’t have enough doomscrolling in your life? Well… <br></br><br></br><b>Reel Rizz</b> is the solution to both of these problems. You’ll match with other users based on your shared taste in <s>brainrot memes</s> transformative short form video content. Like enough of their reels, (and if they like enough of yours), then soon you’ll be able to scroll together, forever.</p>
-			</div>
 
       {/* How it works */}
       <div style={styles.steps}>

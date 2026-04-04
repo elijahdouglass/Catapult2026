@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, CSSProperties, FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api/client";
 
 type View = "login" | "register" | "verify";
 
 export default function Auth() {
-  const [view, setView] = useState<View>("login");
+  const [searchParams] = useSearchParams();
+  const initialView = searchParams.get("mode") === "register" ? "register" : "login";
+  const [view, setView] = useState<View>(initialView);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -127,28 +129,6 @@ export default function Auth() {
             ? "Sign in to find your match"
             : "Create your account and verify your Instagram"}
         </p>
-
-        {/* Mode toggle */}
-        <div style={styles.toggle}>
-          <button
-            style={{
-              ...styles.toggleBtn,
-              ...(view === "login" ? styles.toggleBtnActive : {}),
-            }}
-            onClick={() => { setView("login"); setError(""); }}
-          >
-            Sign in
-          </button>
-          <button
-            style={{
-              ...styles.toggleBtn,
-              ...(view === "register" ? styles.toggleBtnActive : {}),
-            }}
-            onClick={() => { setView("register"); setError(""); }}
-          >
-            Register
-          </button>
-        </div>
 
         {error && <p style={styles.error}>{error}</p>}
 
@@ -315,32 +295,6 @@ const styles: Record<string, CSSProperties> = {
     color: "var(--text-muted)",
     textAlign: "center" as const,
     marginBottom: 24,
-  },
-  toggle: {
-    display: "flex",
-    background: "rgba(232, 67, 111, 0.06)",
-    borderRadius: "var(--radius-full)",
-    padding: 3,
-    marginBottom: 24,
-  },
-  toggleBtn: {
-    flex: 1,
-    padding: "10px",
-    borderRadius: "var(--radius-full)",
-    border: "none",
-    background: "transparent",
-    fontFamily: "var(--font-body)",
-    fontSize: "0.88rem",
-    fontWeight: 500,
-    color: "var(--text-muted)",
-    cursor: "pointer",
-    transition: "all 0.25s ease",
-  },
-  toggleBtnActive: {
-    background: "white",
-    color: "var(--rose-600)",
-    fontWeight: 600,
-    boxShadow: "var(--shadow-sm)",
   },
   error: {
     fontSize: "0.85rem",
