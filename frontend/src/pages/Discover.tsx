@@ -144,7 +144,7 @@ const ReelSlide = memo(function ReelSlide({
   likeCountForPerson: number;
   threshold: number;
   onLike: (reelId: string, ownerId: number) => void;
-  onUnlike: (reelId: string) => void;
+  onUnlike: (reelId: string, ownerId: number) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -193,7 +193,7 @@ const ReelSlide = memo(function ReelSlide({
 
   const handleHeartClick = () => {
     if (liked) {
-      onUnlike(item.reelId);
+      onUnlike(item.reelId, item.person.userId);
     } else {
       onLike(item.reelId, item.person.userId);
       setBursting(true);
@@ -569,16 +569,30 @@ export default function Discover() {
     []
   );
 
-  const handleUnlike = useCallback(async (reelId: string) => {
+  const handleUnlike = useCallback(async (reelId: string, ownerId: number) => {
+    // optimistic
     setLikedReelIds((prev) => {
       const next = new Set(prev);
       next.delete(reelId);
       return next;
     });
+    setPersonLikeCounts((prev) => {
+      const next = new Map(prev);
+      const cur = next.get(ownerId) || 1;
+      if (cur <= 1) next.delete(ownerId);
+      else next.set(ownerId, cur - 1);
+      return next;
+    });
     try {
       await api.post("/discover/reel-unlike", { reelId });
     } catch {
+      // revert
       setLikedReelIds((prev) => new Set(prev).add(reelId));
+      setPersonLikeCounts((prev) => {
+        const next = new Map(prev);
+        next.set(ownerId, (next.get(ownerId) || 0) + 1);
+        return next;
+      });
     }
   }, []);
 
@@ -622,7 +636,7 @@ export default function Discover() {
         const item = items[currentIndex];
         if (item?.kind === "reel") {
           if (likedReelIds.has(item.reelId)) {
-            handleUnlike(item.reelId);
+            handleUnlike(item.reelId, item.person.userId);
           } else {
             handleLike(item.reelId, item.person.userId);
           }
