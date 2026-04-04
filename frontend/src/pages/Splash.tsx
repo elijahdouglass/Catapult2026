@@ -1,10 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import { CSSProperties, useEffect } from "react";
 
 export default function Splash() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     if (user) {
@@ -14,6 +16,31 @@ export default function Splash() {
 
   return (
     <div style={styles.wrapper}>
+      {/* Theme toggle — top right */}
+      <button
+        style={styles.themeBtn}
+        onClick={toggleTheme}
+        aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+      >
+        {theme === "light" ? (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+            <line x1="1" y1="12" x2="3" y2="12" />
+            <line x1="21" y1="12" x2="23" y2="12" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+          </svg>
+        )}
+      </button>
+
       {/* Floating decorative hearts */}
       <div style={styles.heartsContainer} aria-hidden="true">
         {[...Array(6)].map((_, i) => (
@@ -41,13 +68,14 @@ export default function Splash() {
         />
 
         <h1 style={styles.headline}>
-          Your feed knows<br />
-          <span style={styles.headlineAccent}>your type</span>
+          Match through<br />
+          <span style={styles.headlineAccent}>the reels you love</span>
         </h1>
 
         <p style={styles.subtitle}>
-          Upload your Instagram feed words. We match you with people who
-          actually get your vibe. No cap.
+          We read your Instagram interests, find people with similar taste
+          using AI, then let you vibe-check each other's reels.
+          Like enough of theirs, they like enough of yours &mdash; it's a match.
         </p>
 
         <div style={styles.ctas}>
@@ -74,34 +102,70 @@ export default function Splash() {
           {[
             {
               num: "01",
-              icon: "📸",
-              title: "Screenshot",
-              desc: "Snap your Instagram Explore feed word bubbles",
+              icon: "\uD83D\uDCF8",
+              title: "Screenshot your Explore",
+              desc: "Upload a screenshot of your Instagram Explore word bubbles. Our OCR extracts the interest tags that define your taste.",
             },
             {
               num: "02",
-              icon: "🧠",
-              title: "Match",
-              desc: "Our AI reads your vibes and finds your people",
+              icon: "\uD83E\udDE0",
+              title: "AI builds your vibe vector",
+              desc: "Each tag is turned into a semantic embedding. We average them into a single vector that captures your interests.",
             },
             {
               num: "03",
-              icon: "💬",
-              title: "Connect",
-              desc: "Mutual likes unlock each other's Instagram",
+              icon: "\uD83C\uDFAF",
+              title: "Cosine similarity ranking",
+              desc: "We compare your vector against everyone else's. The closer the angle, the higher your compatibility score.",
+            },
+            {
+              num: "04",
+              icon: "\uD83C\uDFAC",
+              title: "Scroll their reels",
+              desc: "Browse matched users' latest Instagram reels in a TikTok-style feed. Our browser extension tracks which reels each user watches.",
+            },
+            {
+              num: "05",
+              icon: "\u2764\uFE0F",
+              title: "Like 3 reels = like the person",
+              desc: "Heart the reels that hit. Once you've liked enough from one person (default 3), you automatically \"like\" them.",
+            },
+            {
+              num: "06",
+              icon: "\uD83D\uDD13",
+              title: "Mutual match = IG reveal",
+              desc: "When both people like each other through reels, you unlock each other's Instagram username. Real connection starts.",
             },
           ].map((step, i) => (
             <div
               key={i}
               style={{
                 ...styles.stepCard,
-                animationDelay: `${0.2 + i * 0.15}s`,
+                animationDelay: `${0.2 + i * 0.1}s`,
               }}
             >
               <div style={styles.stepNum}>{step.num}</div>
               <div style={styles.stepIcon}>{step.icon}</div>
               <h3 style={styles.stepTitle}>{step.title}</h3>
               <p style={styles.stepDesc}>{step.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tech callout */}
+      <div style={styles.techSection}>
+        <h2 style={styles.techTitle}>under the hood</h2>
+        <div style={styles.techGrid}>
+          {[
+            { label: "OCR", detail: "Tesseract via flood-fill bubble detection" },
+            { label: "Embeddings", detail: "sentence-transformers all-MiniLM-L6-v2" },
+            { label: "Matching", detail: "Cosine similarity on mean tag vectors" },
+            { label: "Reel tracking", detail: "Chrome extension with History API hooks" },
+          ].map((t, i) => (
+            <div key={i} style={styles.techChip}>
+              <span style={styles.techLabel}>{t.label}</span>
+              <span style={styles.techDetail}>{t.detail}</span>
             </div>
           ))}
         </div>
@@ -125,6 +189,26 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     position: "relative",
     overflow: "hidden",
+  },
+  themeBtn: {
+    position: "absolute",
+    top: 18,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: "var(--radius-full)",
+    background: "var(--surface-card)",
+    border: "1px solid var(--border-subtle)",
+    color: "var(--text-secondary)",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "all 0.25s ease",
+    padding: 0,
+    zIndex: 10,
+    backdropFilter: "blur(12px)",
+    boxShadow: "var(--shadow-sm)",
   },
   heartsContainer: {
     position: "absolute",
@@ -169,10 +253,10 @@ const styles: Record<string, CSSProperties> = {
     WebkitTextFillColor: "transparent",
   },
   subtitle: {
-    fontSize: "1.1rem",
+    fontSize: "1.05rem",
     color: "var(--text-secondary)",
-    lineHeight: 1.6,
-    maxWidth: 440,
+    lineHeight: 1.65,
+    maxWidth: 480,
     marginBottom: 32,
   },
   ctas: {
@@ -183,8 +267,8 @@ const styles: Record<string, CSSProperties> = {
   },
   steps: {
     width: "100%",
-    maxWidth: 900,
-    padding: "40px 24px 60px",
+    maxWidth: 960,
+    padding: "40px 24px 48px",
     animation: "fadeInUp 0.8s var(--ease-out-expo) 0.3s both",
   },
   stepsTitle: {
@@ -198,14 +282,14 @@ const styles: Record<string, CSSProperties> = {
   },
   stepsGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "16px",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: "14px",
   },
   stepCard: {
     background: "var(--surface-card)",
     border: "1px solid var(--border-subtle)",
     borderRadius: "var(--radius-lg)",
-    padding: "28px 24px",
+    padding: "24px 22px",
     textAlign: "center" as const,
     backdropFilter: "blur(20px)",
     animation: "fadeInUp 0.6s var(--ease-out-expo) both",
@@ -216,22 +300,66 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 700,
     color: "var(--rose-400)",
     letterSpacing: "0.1em",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   stepIcon: {
-    fontSize: "2rem",
-    marginBottom: 10,
+    fontSize: "1.8rem",
+    marginBottom: 8,
   },
   stepTitle: {
-    fontSize: "1.05rem",
+    fontSize: "1rem",
     fontWeight: 600,
     color: "var(--text-primary)",
     marginBottom: 6,
   },
   stepDesc: {
-    fontSize: "0.88rem",
+    fontSize: "0.85rem",
     color: "var(--text-secondary)",
-    lineHeight: 1.5,
+    lineHeight: 1.55,
+  },
+  techSection: {
+    width: "100%",
+    maxWidth: 700,
+    padding: "0 24px 48px",
+    animation: "fadeInUp 0.8s var(--ease-out-expo) 0.5s both",
+  },
+  techTitle: {
+    textAlign: "center" as const,
+    fontSize: "0.85rem",
+    fontWeight: 600,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.12em",
+    color: "var(--text-muted)",
+    marginBottom: 20,
+  },
+  techGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+    gap: "10px",
+  },
+  techChip: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "14px 18px",
+    borderRadius: "var(--radius-md)",
+    background: "var(--surface-glass)",
+    border: "1px solid var(--border-subtle)",
+    backdropFilter: "blur(12px)",
+  },
+  techLabel: {
+    fontSize: "0.75rem",
+    fontWeight: 700,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.08em",
+    color: "var(--rose-500)",
+    flexShrink: 0,
+    minWidth: 90,
+  },
+  techDetail: {
+    fontSize: "0.84rem",
+    color: "var(--text-secondary)",
+    lineHeight: 1.4,
   },
   footer: {
     padding: "24px",

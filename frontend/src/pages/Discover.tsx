@@ -368,7 +368,7 @@ function IntroCard({ person }: { person: FeedPerson }) {
             height="20"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="rgba(255,255,255,.6)"
+            stroke="var(--text-muted)"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -376,7 +376,7 @@ function IntroCard({ person }: { person: FeedPerson }) {
           >
             <polyline points="6 9 12 15 18 9" />
           </svg>
-          <span style={{ color: "rgba(255,255,255,.5)", fontSize: ".85rem" }}>
+          <span style={{ color: "var(--text-muted)", fontSize: ".85rem" }}>
             Scroll to see their reels
           </span>
         </div>
@@ -649,7 +649,7 @@ export default function Discover() {
     return (
       <div style={fullScreenCenterStyle}>
         <div style={emptyStateStyle}>
-          <div style={{ fontSize: "3.2rem", marginBottom: 16 }}>&#x1F30A;</div>
+          <div style={{ fontSize: "3.2rem", marginBottom: 16 }}>💔</div>
           <h3
             style={{
               fontSize: "1.2rem",
@@ -729,7 +729,7 @@ const vh = `calc(100vh - ${NAV_H}px)`;
 const scrollContainerStyle: CSSProperties = {
   height: vh,
   overflowY: "hidden",
-  background: "#0a0a0a",
+  background: "var(--reel-bg)",
   msOverflowStyle: "none",
   scrollbarWidth: "none",
   position: "relative",
@@ -742,7 +742,7 @@ const slideStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  background: "#0a0a0a",
+  background: "var(--reel-bg)",
   flexShrink: 0,
 };
 
@@ -767,7 +767,7 @@ const shimmerStyle: CSSProperties = {
   position: "absolute",
   inset: 0,
   background:
-    "linear-gradient(90deg, #111 25%, #1a1a1a 50%, #111 75%)",
+    "linear-gradient(90deg, var(--reel-shimmer-a) 25%, var(--reel-shimmer-b) 50%, var(--reel-shimmer-a) 75%)",
   backgroundSize: "800px 100%",
   animation: "dr-shimmer 1.5s infinite linear",
 };
@@ -880,7 +880,7 @@ const introBackdropStyle: CSSProperties = {
   position: "absolute",
   inset: 0,
   background:
-    "linear-gradient(145deg, #0f0515 0%, #1a0a2e 30%, #2d0a3e 60%, #0f0515 100%)",
+    "linear-gradient(145deg, var(--reel-intro-a) 0%, var(--reel-intro-b) 30%, var(--reel-intro-c) 60%, var(--reel-intro-a) 100%)",
   backgroundSize: "200% 200%",
   animation: "dr-gradientShift 8s ease infinite",
 };
@@ -913,7 +913,7 @@ const simRingInnerStyle: CSSProperties = {
   width: "100%",
   height: "100%",
   borderRadius: "50%",
-  background: "#150a20",
+  background: "var(--reel-sim-ring-bg)",
   display: "flex",
   alignItems: "baseline",
   justifyContent: "center",
@@ -939,7 +939,7 @@ const simLabelStyle: CSSProperties = {
 const introNameStyle: CSSProperties = {
   fontSize: "2rem",
   fontWeight: 800,
-  color: "white",
+  color: "var(--text-primary)",
   letterSpacing: "-.03em",
   textAlign: "center",
 };
@@ -957,9 +957,9 @@ const introTagPillStyle: CSSProperties = {
   borderRadius: "var(--radius-full)",
   fontSize: ".8rem",
   fontWeight: 500,
-  background: "rgba(255,255,255,.07)",
-  color: "rgba(255,255,255,.75)",
-  border: "1px solid rgba(255,255,255,.1)",
+  background: "var(--surface-glass)",
+  color: "var(--text-secondary)",
+  border: "1px solid var(--border-subtle)",
   backdropFilter: "blur(8px)",
 };
 
@@ -1070,7 +1070,7 @@ const fullScreenCenterStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  background: "#0a0a0a",
+  background: "var(--reel-bg)",
 };
 
 const emptyStateStyle: CSSProperties = {
