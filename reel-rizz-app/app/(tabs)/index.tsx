@@ -32,13 +32,18 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 /* ── types ─────────────────────────────────────── */
 
+interface ReelInfo {
+  reelId: string;
+  videoUrl: string | null;
+}
+
 interface FeedPerson {
   userId: number;
   displayName: string;
   igUsername: string | null;
   tags: string | null;
   similarityScore: number;
-  reels: string[];
+  reels: ReelInfo[];
   worldIdVerified?: boolean;
 }
 
@@ -63,14 +68,20 @@ interface VideoResponse {
 
 type FeedItem =
   | { kind: 'intro'; person: FeedPerson; key: string }
-  | { kind: 'reel'; person: FeedPerson; reelId: string; index: number; key: string };
+  | { kind: 'reel'; person: FeedPerson; reelId: string; videoUrl: string | null; index: number; key: string };
 
 /* ── video url cache ──────────────────────────── */
 
 const videoUrlCache = new Map<string, string>();
 
-async function fetchVideoUrl(reelId: string): Promise<string | null> {
+async function fetchVideoUrl(reelId: string, directUrl: string | null): Promise<string | null> {
   if (videoUrlCache.has(reelId)) return videoUrlCache.get(reelId)!;
+  // Use direct CDN URL from webhook if available
+  if (directUrl) {
+    videoUrlCache.set(reelId, directUrl);
+    return directUrl;
+  }
+  // Fallback: resolve via Instagram proxy
   try {
     const json = await api.get<VideoResponse>(
       `/video?postUrl=${encodeURIComponent(`https://www.instagram.com/reel/${reelId}/`)}`
@@ -115,7 +126,7 @@ const ReelSlide = memo(function ReelSlide({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchVideoUrl(item.reelId).then((url) => {
+    fetchVideoUrl(item.reelId, item.videoUrl).then((url) => {
       if (!cancelled) {
         setVideoUrl(url);
         setLoading(false);
@@ -348,7 +359,7 @@ export default function DiscoverScreen() {
         for (const person of data.feed) {
           let c = 0;
           for (const r of person.reels) {
-            if (data.likedReelIds.includes(r)) c++;
+            if (data.likedReelIds.includes(r.reelId)) c++;
           }
           if (c > 0) counts.set(person.userId, c);
         }
@@ -361,8 +372,8 @@ export default function DiscoverScreen() {
   const items: FeedItem[] = [];
   for (const person of feed) {
     items.push({ kind: 'intro', person, key: `intro-${person.userId}` });
-    person.reels.forEach((reelId, index) => {
-      items.push({ kind: 'reel', person, reelId, index, key: `reel-${reelId}` });
+    person.reels.forEach((reel, index) => {
+      items.push({ kind: 'reel', person, reelId: reel.reelId, videoUrl: reel.videoUrl, index, key: `reel-${reel.reelId}` });
     });
   }
 

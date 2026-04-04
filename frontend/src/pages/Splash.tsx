@@ -130,7 +130,7 @@ export default function Splash() {
           </button>
         </div>
 
-				<section style={styles.testimonialSection}>
+				{/*<section style={styles.testimonialSection}>
           <div style={styles.testimonialViewport}>
             <div style={styles.testimonialTrack}>
               {[...testimonials, ...testimonials].map((testimonial, index) => (
@@ -165,7 +165,7 @@ export default function Splash() {
               ))}
             </div>
           </div>
-        </section>
+        </section>*/}
 
       </div>
 

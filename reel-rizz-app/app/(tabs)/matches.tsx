@@ -16,7 +16,7 @@ import { api } from '@/api/client';
 import { useAuth } from '@/context/auth';
 import { Colors } from '@/constants/theme';
 import { VerifiedBadge } from '@/components/verified-badge';
-import { WorldIdVerify } from '@/components/world-id-verify';
+import { useWorldIdVerify } from '@/components/world-id-verify';
 
 interface Match {
   userId: number;
@@ -31,7 +31,7 @@ export default function MatchesScreen() {
   const { user, logout, refreshUser } = useAuth();
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
-  const [worldIdOpen, setWorldIdOpen] = useState(false);
+  const { open: openWorldId } = useWorldIdVerify({ onVerified: refreshUser });
 
   useEffect(() => {
     api
@@ -62,7 +62,7 @@ export default function MatchesScreen() {
               <VerifiedBadge />
             ) : (
               <TouchableOpacity
-                onPress={() => setWorldIdOpen(true)}
+                onPress={openWorldId}
                 style={styles.verifyBtn}
               >
                 <Ionicons name="shield-checkmark" size={16} color={Colors.rose500} />
@@ -75,12 +75,6 @@ export default function MatchesScreen() {
           </View>
         </View>
       </View>
-
-      <WorldIdVerify
-        open={worldIdOpen}
-        onClose={() => setWorldIdOpen(false)}
-        onVerified={() => refreshUser()}
-      />
 
       {matches.length === 0 ? (
         <Animated.View entering={FadeIn} style={styles.empty}>
