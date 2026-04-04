@@ -101,10 +101,10 @@ export default function Navbar() {
 
   return (
     <nav style={styles.nav}>
-      <div style={styles.logoArea}>
+      <a href="/" style={styles.logoArea}>
         <img src="/assets/logo.webp" alt="Reel Rizz" style={styles.logoImg} />
         <span style={styles.logoText}>Reel Rizz</span>
-      </div>
+      </a>
 
       <div style={styles.links}>
         <NavLink
