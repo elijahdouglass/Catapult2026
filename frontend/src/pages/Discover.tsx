@@ -10,13 +10,18 @@ import { api } from "../api/client";
 
 /* ── types ─────────────────────────────────────────────── */
 
+interface ReelInfo {
+  reelId: string;
+  videoUrl: string | null;
+}
+
 interface FeedPerson {
   userId: number;
   displayName: string;
   igUsername: string | null;
   tags: string | null;
   similarityScore: number;
-  reels: string[];
+  reels: ReelInfo[];
 }
 
 interface FeedResponse {
@@ -40,7 +45,7 @@ interface VideoResponse {
 
 type FeedItem =
   | { kind: "intro"; person: FeedPerson }
-  | { kind: "reel"; person: FeedPerson; reelId: string; index: number };
+  | { kind: "reel"; person: FeedPerson; reelId: string; videoUrl: string | null; index: number };
 
 /* ── inject keyframe animations once ───────────────────── */
 
@@ -110,8 +115,17 @@ const NAV_H = 60;
 
 const videoUrlCache = new Map<string, string>();
 
-async function fetchVideoUrl(reelId: string): Promise<string | null> {
+async function fetchVideoUrl(
+  reelId: string,
+  directUrl: string | null
+): Promise<string | null> {
   if (videoUrlCache.has(reelId)) return videoUrlCache.get(reelId)!;
+  // Use direct CDN URL from webhook if available
+  if (directUrl) {
+    videoUrlCache.set(reelId, directUrl);
+    return directUrl;
+  }
+  // Otherwise resolve via Instagram proxy (shortcode-based reels from extension)
   try {
     const json = await api.get<VideoResponse>(
       `/video?postUrl=${encodeURIComponent(
@@ -159,7 +173,7 @@ const ReelSlide = memo(function ReelSlide({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchVideoUrl(item.reelId).then((url) => {
+    fetchVideoUrl(item.reelId, item.videoUrl).then((url) => {
       if (!cancelled) {
         setVideoUrl(url);
         setLoading(false);
@@ -507,7 +521,7 @@ export default function Discover() {
         for (const person of data.feed) {
           let c = 0;
           for (const r of person.reels) {
-            if (data.likedReelIds.includes(r)) c++;
+            if (data.likedReelIds.includes(r.reelId)) c++;
           }
           if (c > 0) counts.set(person.userId, c);
         }
@@ -521,8 +535,8 @@ export default function Discover() {
   const items: FeedItem[] = [];
   for (const person of feed) {
     items.push({ kind: "intro", person });
-    person.reels.forEach((reelId, index) => {
-      items.push({ kind: "reel", person, reelId, index });
+    person.reels.forEach((reel, index) => {
+      items.push({ kind: "reel", person, reelId: reel.reelId, videoUrl: reel.videoUrl, index });
     });
   }
 

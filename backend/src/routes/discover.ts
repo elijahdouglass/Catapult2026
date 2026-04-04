@@ -83,7 +83,7 @@ router.get("/feed", authMiddleware, async (req: AuthRequest, res: Response) => {
       reelViews: {
         orderBy: { viewedAt: "desc" },
         take: 5,
-        select: { reelId: true },
+        select: { reelId: true, videoUrl: true },
       },
     },
   });
@@ -100,7 +100,10 @@ router.get("/feed", authMiddleware, async (req: AuthRequest, res: Response) => {
       similarityScore: Math.round(
         cosineSimilarity(me.tagVector!, c.tagVector!) * 100
       ),
-      reels: c.reelViews.map((r) => r.reelId),
+      reels: c.reelViews.map((r) => ({
+        reelId: r.reelId,
+        videoUrl: r.videoUrl,
+      })),
     }))
     .sort((a, b) => b.similarityScore - a.similarityScore);
 

@@ -2,8 +2,33 @@ import { Router, Request, Response } from "express";
 import prisma from "../lib/prisma";
 
 const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN;
+const IG_PAGE_ACCESS_TOKEN = process.env.IG_PAGE_ACCESS_TOKEN;
 
 const router = Router();
+
+async function reactToMessage(messageId: string, senderId: string) {
+  if (!IG_PAGE_ACCESS_TOKEN) {
+    console.warn("No IG_PAGE_ACCESS_TOKEN set, skipping reaction");
+    return;
+  }
+
+  try {
+    await fetch(
+      `https://graph.instagram.com/v21.0/me/messages?access_token=${IG_PAGE_ACCESS_TOKEN}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient: { id: senderId },
+          sender_action: "react",
+          payload: { message_id: messageId, reaction: "love" },
+        }),
+      }
+    );
+  } catch (err) {
+    console.error("Failed to react to message:", err);
+  }
+}
 
 // ─── Meta webhook verification ──────────────────────────────────────
 
@@ -25,7 +50,7 @@ router.get("/instagram", (req: Request, res: Response) => {
 
 interface IgAttachment {
   type: string;
-  payload?: { url?: string };
+  payload?: { url?: string; reel_video_id?: string };
 }
 
 interface IgMessage {
@@ -55,14 +80,9 @@ interface IgWebhookPayload {
   entry?: IgEntry[];
 }
 
-const REEL_ID_REGEX = /instagram\.com\/reels?\/([A-Za-z0-9_-]+)/;
-
-function extractReelId(url: string): string | null {
-  const match = url.match(REEL_ID_REGEX);
-  return match ? match[1] : null;
-}
-
 router.post("/instagram", async (req: Request, res: Response) => {
+  console.log("Webhook POST received:", JSON.stringify(req.body, null, 2));
+
   // Always respond 200 quickly — Meta requires <20s
   res.sendStatus(200);
 
@@ -77,25 +97,49 @@ router.post("/instagram", async (req: Request, res: Response) => {
         const msg = event.message;
         if (!msg) continue;
         if (msg.is_echo || msg.is_deleted || msg.is_unsupported) continue;
+
+        const senderIgId = event.sender.id;
+
+        // ── DM verification: check text messages for verify codes ──
+        if (msg.text) {
+          const code = msg.text.trim().toUpperCase();
+          const pendingUser = await prisma.user.findFirst({
+            where: { igVerifyCode: code, igVerified: false },
+          });
+
+          if (pendingUser) {
+            await prisma.user.update({
+              where: { id: pendingUser.id },
+              data: {
+                igVerified: true,
+                igUserId: senderIgId,
+                igVerifyCode: null,
+              },
+            });
+            console.log(
+              `Verified user ${pendingUser.id} (${pendingUser.igUsername}) via DM from ${senderIgId}`
+            );
+            continue;
+          }
+        }
+
+        // ── Reel tracking: check attachments for reels ──
         if (!msg.attachments) continue;
 
-        // Find reel attachments
         for (const attachment of msg.attachments) {
           if (attachment.type !== "ig_reel" && attachment.type !== "reel") {
             continue;
           }
 
-          const url = attachment.payload?.url;
-          if (!url) continue;
-
-          const reelId = extractReelId(url);
+          const reelId = attachment.payload?.reel_video_id;
           if (!reelId) {
-            console.warn("Could not extract reel ID from:", url);
+            console.warn(
+              "No reel_video_id in attachment:",
+              JSON.stringify(attachment.payload)
+            );
             continue;
           }
-
-          // The sender is the Reel Rizz user who DM'd our account
-          const senderIgId = event.sender.id;
+          const videoUrl = attachment.payload?.url ?? null;
 
           const user = await prisma.user.findUnique({
             where: { igUserId: senderIgId },
@@ -112,13 +156,18 @@ router.post("/instagram", async (req: Request, res: Response) => {
             where: {
               userId_reelId: { userId: user.id, reelId },
             },
-            update: { viewedAt: new Date() },
-            create: { userId: user.id, reelId },
+            update: { viewedAt: new Date(), videoUrl },
+            create: { userId: user.id, reelId, videoUrl },
           });
 
           console.log(
             `Recorded reel ${reelId} for user ${user.id} (${user.igUsername})`
           );
+
+          // React to confirm receipt
+          if (msg.mid) {
+            await reactToMessage(msg.mid, senderIgId);
+          }
         }
       }
     }

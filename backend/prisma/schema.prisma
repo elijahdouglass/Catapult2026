@@ -14,6 +14,8 @@ model User {
   displayName    String
   igUserId       String?  @unique
   igUsername      String?
+  igVerified     Boolean  @default(false)
+  igVerifyCode   String?
   tags           String?  @db.Text
   tagVector      Bytes?   @db.MediumBlob
   screenshotPath String?
@@ -45,6 +47,7 @@ model ReelView {
   id       Int      @id @default(autoincrement())
   userId   Int
   reelId   String
+  videoUrl String?  @db.Text
   viewedAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
