@@ -3,10 +3,50 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { CSSProperties, useEffect } from "react";
 
+const testimonials = [
+  {
+    quote: "As a Catapult judge I can't comment on any projects.",
+    name: "Shrung Patel",
+    role: "Catapult Organizer",
+    photoUrl: "/assets/shrung.png",
+    initials: "SP",
+  },
+];
+
 export default function Splash() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+
+  useEffect(() => {
+    const styleId = "splash-page-keyframes";
+
+    if (document.getElementById(styleId)) {
+      return;
+    }
+
+    const styleSheet = document.createElement("style");
+    styleSheet.id = styleId;
+    styleSheet.textContent = `
+      @keyframes floatDown {
+        0% { transform: translateY(-20px) rotate(0deg); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { transform: translateY(100vh) rotate(30deg); opacity: 0; }
+      }
+
+      @keyframes testimonialLoop {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+      }
+    `;
+
+    document.head.appendChild(styleSheet);
+
+    return () => {
+      styleSheet.remove();
+    };
+  }, []);
 
   return (
     <div style={styles.wrapper}>
@@ -68,13 +108,12 @@ export default function Splash() {
           <span style={styles.headlineAccent}>the reels you love</span>
         </h1>
 
-				<p style={styles.subtitle}>Don’t have enough love in your life? Don’t have enough doomscrolling in your life? Well… <br></br><br></br><b>Reel Rizz</b> is the solution to both of these problems. You’ll match with other users based on your shared taste in <s>brainrot memes</s> transformative short form video content. Like enough of their reels, (and if they like enough of yours), then soon you’ll be able to scroll together, forever.</p>
+				<p style={styles.subtitle}>Don’t have enough love in your life? Don’t have enough doomscrolling in your life? Well… <br /><br /><b>Reel Rizz</b> is the solution to both of these problems. You’ll match with other users based on your shared taste in <s>brainrot memes</s> transformative short form video content. Like enough of their reels, (and if they like enough of yours), then soon you’ll be able to scroll together, forever.</p>
 					{/* <p style={styles.subtitle}>
            We read your Instagram interests, find people with similar taste
            using AI, then let you vibe-check each other's reels.
            Like enough of theirs, they like enough of yours &mdash; it's a match.
          </p> */}
-
         <div style={styles.ctas}>
           <button
             className="btn btn-primary"
@@ -90,6 +129,44 @@ export default function Splash() {
             I have an account
           </button>
         </div>
+
+				{/*<section style={styles.testimonialSection}>
+          <div style={styles.testimonialViewport}>
+            <div style={styles.testimonialTrack}>
+              {[...testimonials, ...testimonials].map((testimonial, index) => (
+                <article
+                  key={`${testimonial.name}-${index}`}
+                  style={styles.testimonialCard}
+                >
+                  <div
+                    style={{
+                      ...styles.testimonialPhoto,
+                      backgroundImage: testimonial.photoUrl
+                        ? `linear-gradient(135deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.28)), url(${testimonial.photoUrl})`
+                        : styles.testimonialPhoto.backgroundImage,
+                    }}
+                    aria-hidden="true"
+                  >
+                    <span style={styles.testimonialPhotoInitials}>
+                      {testimonial.initials}
+                    </span>
+                  </div>
+
+                  <div style={styles.testimonialContent}>
+                    <blockquote style={styles.testimonialText}>
+                      "{testimonial.quote}"
+                    </blockquote>
+                    <cite style={styles.testimonialAuthor}>
+                      <strong>{testimonial.name}</strong>
+                      <span style={styles.testimonialRole}>{testimonial.role}</span>
+                    </cite>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>*/}
+
       </div>
 
 
@@ -263,6 +340,84 @@ const styles: Record<string, CSSProperties> = {
     flexWrap: "wrap" as const,
     justifyContent: "center",
   },
+  testimonialSection: {
+    width: "100%",
+    maxWidth: 760,
+    marginBottom: 32,
+  },
+  testimonialViewport: {
+    overflow: "hidden",
+    width: "100%",
+    maskImage: "linear-gradient(to right, transparent, black 10%, black 90%, transparent)",
+    WebkitMaskImage:
+      "linear-gradient(to right, transparent, black 10%, black 90%, transparent)",
+  },
+  testimonialTrack: {
+    display: "flex",
+    gap: 16,
+    width: "max-content",
+    animation: "testimonialLoop 24s linear infinite",
+  },
+  testimonialCard: {
+    display: "flex",
+    alignItems: "center",
+    gap: 16,
+    background: "var(--surface-glass)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-lg)",
+    padding: "18px",
+    backdropFilter: "blur(14px)",
+    boxShadow: "var(--shadow-sm)",
+    width: 340,
+    flex: "0 0 340px",
+  },
+  testimonialPhoto: {
+    width: 88,
+    height: 88,
+    borderRadius: "24px",
+    flexShrink: 0,
+    background:
+      "linear-gradient(135deg, rgba(232, 67, 111, 0.9), rgba(255, 122, 89, 0.85))",
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+    overflow: "hidden",
+    position: "relative",
+  },
+  testimonialPhotoInitials: {
+    fontSize: "0.78rem",
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    color: "rgba(255,255,255,0.92)",
+    padding: "0 0 10px 10px",
+    textShadow: "0 1px 8px rgba(0,0,0,0.32)",
+  },
+  testimonialContent: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    textAlign: "left",
+  },
+  testimonialText: {
+    margin: 0,
+    fontSize: "0.96rem",
+    lineHeight: 1.6,
+    color: "var(--text-primary)",
+  },
+  testimonialAuthor: {
+    display: "flex",
+    flexDirection: "column",
+    marginTop: 14,
+    fontStyle: "normal",
+    color: "var(--text-secondary)",
+    gap: 2,
+  },
+  testimonialRole: {
+    fontSize: "0.85rem",
+    color: "var(--text-muted)",
+  },
   steps: {
     width: "100%",
     maxWidth: 960,
@@ -369,15 +524,3 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 400,
   },
 };
-
-// Inject the floatDown keyframes
-const styleSheet = document.createElement("style");
-styleSheet.textContent = `
-  @keyframes floatDown {
-    0% { transform: translateY(-20px) rotate(0deg); opacity: 0; }
-    10% { opacity: 1; }
-    90% { opacity: 1; }
-    100% { transform: translateY(100vh) rotate(30deg); opacity: 0; }
-  }
-`;
-document.head.appendChild(styleSheet);
