@@ -6,17 +6,38 @@ import authRoutes from "./routes/auth";
 import onboardingRoutes from "./routes/onboarding";
 import discoverRoutes from "./routes/discover";
 import matchesRoutes from "./routes/matches";
+import reelsRoutes from "./routes/reels";
+import videoRoutes from "./routes/video";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:5173" }));
+const allowedOrigins = [
+  process.env.CORS_ORIGIN || "http://localhost:5173",
+  "chrome-extension://*",
+];
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.some((o) => o === origin || (o.includes("*") && origin?.startsWith(o.replace("*", ""))))) {
+        callback(null, true);
+      } else if (process.env.NODE_ENV === "production") {
+        callback(new Error("Not allowed by CORS"));
+      } else {
+        console.warn(`CORS: allowing unlisted origin in dev: ${origin}`);
+        callback(null, true);
+      }
+    },
+  })
+);
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/onboarding", onboardingRoutes);
 app.use("/api/discover", discoverRoutes);
 app.use("/api/matches", matchesRoutes);
+app.use("/api/reels", reelsRoutes);
+app.use("/api/video", videoRoutes);
 
 app.listen(PORT, () => {
   console.log(`Reel Rizz backend running on http://localhost:${PORT}`);

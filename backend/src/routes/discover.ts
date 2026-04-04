@@ -5,6 +5,7 @@ import { cosineSimilarity } from "../services/similarity";
 
 const router = Router();
 
+// Original discover endpoint (ranked candidates)
 router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
   const me = await prisma.user.findUnique({ where: { id: req.userId! } });
   if (!me || !me.tagVector) {
@@ -51,6 +52,163 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
   res.json(ranked.slice(start, start + limit));
 });
 
+// Feed: get ranked candidates with their latest 5 reels
+router.get("/feed", authMiddleware, async (req: AuthRequest, res: Response) => {
+  const me = await prisma.user.findUnique({ where: { id: req.userId! } });
+  if (!me || !me.tagVector) {
+    res.status(400).json({ error: "Complete onboarding first" });
+    return;
+  }
+
+  // Users we already fully liked (via Like model) should be excluded
+  const likedIds = (
+    await prisma.like.findMany({
+      where: { likerId: me.id },
+      select: { likeeId: true },
+    })
+  ).map((l) => l.likeeId);
+
+  const candidates = await prisma.user.findMany({
+    where: {
+      onboarded: true,
+      id: { notIn: [me.id, ...likedIds] },
+      tagVector: { not: null },
+    },
+    select: {
+      id: true,
+      displayName: true,
+      igUsername: true,
+      tags: true,
+      tagVector: true,
+      reelViews: {
+        orderBy: { viewedAt: "desc" },
+        take: 5,
+        select: { reelId: true },
+      },
+    },
+  });
+
+  // Only include candidates that have reels
+  const withReels = candidates.filter((c) => c.reelViews.length > 0);
+
+  const ranked = withReels
+    .map((c) => ({
+      userId: c.id,
+      displayName: c.displayName,
+      igUsername: c.igUsername,
+      tags: c.tags,
+      similarityScore: Math.round(
+        cosineSimilarity(me.tagVector!, c.tagVector!) * 100
+      ),
+      reels: c.reelViews.map((r) => r.reelId),
+    }))
+    .sort((a, b) => b.similarityScore - a.similarityScore);
+
+  // Also fetch which reels the current user already liked
+  const myReelLikes = await prisma.reelLike.findMany({
+    where: { likerId: me.id },
+    select: { reelId: true },
+  });
+  const likedReelIds = myReelLikes.map((r) => r.reelId);
+
+  res.json({
+    feed: ranked,
+    likedReelIds,
+    likeThreshold: me.likeThreshold,
+  });
+});
+
+// Like a specific reel, auto-create Like if threshold met
+router.post(
+  "/reel-like",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const { reelId, ownerId } = req.body;
+    if (!reelId || !ownerId) {
+      res.status(400).json({ error: "reelId and ownerId are required" });
+      return;
+    }
+    if (ownerId === req.userId) {
+      res.status(400).json({ error: "Cannot like your own reel" });
+      return;
+    }
+
+    // Upsert the reel like
+    await prisma.reelLike.upsert({
+      where: { likerId_reelId: { likerId: req.userId!, reelId } },
+      create: { likerId: req.userId!, ownerId, reelId },
+      update: {},
+    });
+
+    // Count how many of this owner's reels the user has liked
+    const likeCount = await prisma.reelLike.count({
+      where: { likerId: req.userId!, ownerId },
+    });
+
+    // Get the user's like threshold
+    const me = await prisma.user.findUnique({
+      where: { id: req.userId! },
+      select: { likeThreshold: true },
+    });
+    const threshold = me?.likeThreshold ?? 3;
+
+    let personLiked = false;
+    let mutual = false;
+
+    if (likeCount >= threshold) {
+      // Auto-create a Like for the person
+      await prisma.like.upsert({
+        where: {
+          likerId_likeeId: { likerId: req.userId!, likeeId: ownerId },
+        },
+        create: { likerId: req.userId!, likeeId: ownerId },
+        update: {},
+      });
+      personLiked = true;
+
+      // Check if mutual
+      const reverseLike = await prisma.like.findUnique({
+        where: {
+          likerId_likeeId: { likerId: ownerId, likeeId: req.userId! },
+        },
+      });
+      mutual = !!reverseLike;
+    }
+
+    // Get owner info for match popup
+    let matchInfo = null;
+    if (mutual) {
+      const owner = await prisma.user.findUnique({
+        where: { id: ownerId },
+        select: { displayName: true, igUsername: true },
+      });
+      matchInfo = owner;
+    }
+
+    res.json({ likeCount, threshold, personLiked, mutual, matchInfo });
+  }
+);
+
+// Unlike a reel
+router.post(
+  "/reel-unlike",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const { reelId } = req.body;
+    if (!reelId) {
+      res.status(400).json({ error: "reelId is required" });
+      return;
+    }
+
+    await prisma.reelLike.deleteMany({
+      where: { likerId: req.userId!, reelId },
+    });
+
+    res.json({ unliked: true });
+  }
+);
+
+// Original like endpoint
 router.post(
   "/like",
   authMiddleware,
@@ -81,6 +239,26 @@ router.post(
     });
 
     res.json({ liked: true, mutual: !!mutual });
+  }
+);
+
+// Update like threshold setting
+router.post(
+  "/settings",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const { likeThreshold } = req.body;
+    if (typeof likeThreshold !== "number" || likeThreshold < 1 || likeThreshold > 5) {
+      res.status(400).json({ error: "likeThreshold must be 1-5" });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: req.userId! },
+      data: { likeThreshold },
+    });
+
+    res.json({ likeThreshold });
   }
 );
 

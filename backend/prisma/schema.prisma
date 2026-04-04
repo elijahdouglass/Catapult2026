@@ -17,11 +17,14 @@ model User {
   tagVector      Bytes?   @db.MediumBlob
   screenshotPath String?
   onboarded      Boolean  @default(false)
+  likeThreshold  Int      @default(3)
   createdAt      DateTime @default(now())
 
   likesGiven    Like[] @relation("LikerRelation")
   likesReceived Like[] @relation("LikeeRelation")
   reelViews     ReelView[]
+  reelLikesGiven ReelLike[] @relation("ReelLikerRelation")
+  reelLikesReceived ReelLike[] @relation("ReelOwnerRelation")
 }
 
 model Like {
@@ -35,4 +38,30 @@ model Like {
 
   @@unique([likerId, likeeId])
   @@index([likeeId])
+}
+
+model ReelView {
+  id       Int      @id @default(autoincrement())
+  userId   Int
+  reelId   String
+  viewedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, reelId])
+  @@index([userId])
+}
+
+model ReelLike {
+  id        Int      @id @default(autoincrement())
+  likerId   Int
+  ownerId   Int
+  reelId    String
+  createdAt DateTime @default(now())
+
+  liker User @relation("ReelLikerRelation", fields: [likerId], references: [id], onDelete: Cascade)
+  owner User @relation("ReelOwnerRelation", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([likerId, reelId])
+  @@index([likerId, ownerId])
 }
