@@ -34,8 +34,14 @@ router.post(
   upload.single("screenshot"),
   async (req: AuthRequest, res: Response) => {
     const { igUsername } = req.body;
-    if (!igUsername) {
-      res.status(400).json({ error: "Instagram username is required" });
+    if (
+      !igUsername ||
+      typeof igUsername !== "string" ||
+      !/^[a-zA-Z0-9._]{1,30}$/.test(igUsername)
+    ) {
+      res
+        .status(400)
+        .json({ error: "Valid Instagram username is required (letters, numbers, periods, underscores)" });
       return;
     }
     if (!req.file) {

@@ -106,8 +106,6 @@ function injectStyles() {
 /* ── constants ─────────────────────────────────────────── */
 
 const NAV_H = 60;
-const API_BASE = "http://localhost:3001/api";
-
 /* ── video cache ───────────────────────────────────────── */
 
 const videoUrlCache = new Map<string, string>();
@@ -115,12 +113,11 @@ const videoUrlCache = new Map<string, string>();
 async function fetchVideoUrl(reelId: string): Promise<string | null> {
   if (videoUrlCache.has(reelId)) return videoUrlCache.get(reelId)!;
   try {
-    const res = await fetch(
-      `${API_BASE}/video?postUrl=${encodeURIComponent(
+    const json = await api.get<VideoResponse>(
+      `/video?postUrl=${encodeURIComponent(
         `https://www.instagram.com/reel/${reelId}/`
       )}`
     );
-    const json: VideoResponse = await res.json();
     if (json.status === "success" && json.data?.videoUrl) {
       videoUrlCache.set(reelId, json.data.videoUrl);
       return json.data.videoUrl;
@@ -614,6 +611,27 @@ export default function Discover() {
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [advance]);
+
+  // keyboard arrow handlers
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowDown") { e.preventDefault(); advance(1); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); advance(-1); }
+      else if (e.key === " ") {
+        e.preventDefault();
+        const item = items[currentIndex];
+        if (item?.kind === "reel") {
+          if (likedReelIds.has(item.reelId)) {
+            handleUnlike(item.reelId);
+          } else {
+            handleLike(item.reelId, item.person.userId);
+          }
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [advance, currentIndex, items, likedReelIds, handleLike, handleUnlike]);
 
   // touch handlers
   useEffect(() => {

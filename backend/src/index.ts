@@ -12,9 +12,13 @@ import videoRoutes from "./routes/video";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const CHROME_EXTENSION_ID = process.env.CHROME_EXTENSION_ID || "";
+
 const allowedOrigins = [
   process.env.CORS_ORIGIN || "http://localhost:5173",
-  "chrome-extension://*",
+  ...(CHROME_EXTENSION_ID
+    ? [`chrome-extension://${CHROME_EXTENSION_ID}`]
+    : []),
 ];
 app.use(
   cors({

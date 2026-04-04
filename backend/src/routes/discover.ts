@@ -45,8 +45,8 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
     }))
     .sort((a, b) => b.similarityScore - a.similarityScore);
 
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 20;
+  const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
   const start = (page - 1) * limit;
 
   res.json(ranked.slice(start, start + limit));
@@ -133,47 +133,53 @@ router.post(
       return;
     }
 
-    // Upsert the reel like
-    await prisma.reelLike.upsert({
-      where: { likerId_reelId: { likerId: req.userId!, reelId } },
-      create: { likerId: req.userId!, ownerId, reelId },
-      update: {},
-    });
+    // Run the entire like-threshold check in a transaction to prevent race conditions
+    const { likeCount, threshold, personLiked, mutual } =
+      await prisma.$transaction(async (tx) => {
+        // Upsert the reel like
+        await tx.reelLike.upsert({
+          where: { likerId_reelId: { likerId: req.userId!, reelId } },
+          create: { likerId: req.userId!, ownerId, reelId },
+          update: {},
+        });
 
-    // Count how many of this owner's reels the user has liked
-    const likeCount = await prisma.reelLike.count({
-      where: { likerId: req.userId!, ownerId },
-    });
+        // Count how many of this owner's reels the user has liked
+        const likeCount = await tx.reelLike.count({
+          where: { likerId: req.userId!, ownerId },
+        });
 
-    // Get the user's like threshold
-    const me = await prisma.user.findUnique({
-      where: { id: req.userId! },
-      select: { likeThreshold: true },
-    });
-    const threshold = me?.likeThreshold ?? 3;
+        // Get the user's like threshold
+        const me = await tx.user.findUnique({
+          where: { id: req.userId! },
+          select: { likeThreshold: true },
+        });
+        const threshold = me?.likeThreshold ?? 3;
 
-    let personLiked = false;
-    let mutual = false;
+        let personLiked = false;
+        let mutual = false;
 
-    if (likeCount >= threshold) {
-      // Auto-create a Like for the person
-      await prisma.like.upsert({
-        where: {
-          likerId_likeeId: { likerId: req.userId!, likeeId: ownerId },
-        },
-        create: { likerId: req.userId!, likeeId: ownerId },
-        update: {},
+        if (likeCount >= threshold) {
+          // Auto-create a Like for the person
+          await tx.like.upsert({
+            where: {
+              likerId_likeeId: { likerId: req.userId!, likeeId: ownerId },
+            },
+            create: { likerId: req.userId!, likeeId: ownerId },
+            update: {},
+          });
+          personLiked = true;
+
+          // Check if mutual
+          const reverseLike = await tx.like.findUnique({
+            where: {
+              likerId_likeeId: { likerId: ownerId, likeeId: req.userId! },
+            },
+          });
+          mutual = !!reverseLike;
+        }
+
+        return { likeCount, threshold, personLiked, mutual };
       });
-      personLiked = true;
-
-      // Check if mutual
-      const reverseLike = await prisma.like.findUnique({
-        where: {
-          likerId_likeeId: { likerId: ownerId, likeeId: req.userId! },
-        },
-      });
-      mutual = !!reverseLike;
-    }
 
     // Get owner info for match popup
     let matchInfo = null;
