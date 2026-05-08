@@ -1,6 +1,7 @@
 import {
   useState,
   useEffect,
+  useMemo,
   useRef,
   useCallback,
   CSSProperties,
@@ -554,6 +555,8 @@ export default function Discover() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollLocked = useRef(false);
   const touchStartY = useRef(0);
+  const lastSeenPersonRef = useRef<number | null>(null);
+  const markedSeenRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     injectStyles();
@@ -563,6 +566,8 @@ export default function Discover() {
   useEffect(() => {
     setLoading(true);
     setCurrentIndex(0);
+    lastSeenPersonRef.current = null;
+    markedSeenRef.current.clear();
     const qs = verifiedOnly ? "?verifiedOnly=true" : "";
     api
       .get<FeedResponse>(`/discover/feed${qs}`)
@@ -586,13 +591,33 @@ export default function Discover() {
   }, [verifiedOnly]);
 
   // build flat feed items
-  const items: FeedItem[] = [];
-  for (const person of feed) {
-    items.push({ kind: "intro", person });
-    person.reels.forEach((reel, index) => {
-      items.push({ kind: "reel", person, reelId: reel.reelId, videoUrl: reel.videoUrl, index });
-    });
-  }
+  const items = useMemo<FeedItem[]>(() => {
+    const out: FeedItem[] = [];
+    for (const person of feed) {
+      out.push({ kind: "intro", person });
+      person.reels.forEach((reel, index) => {
+        out.push({ kind: "reel", person, reelId: reel.reelId, videoUrl: reel.videoUrl, index });
+      });
+    }
+    return out;
+  }, [feed]);
+
+  // mark a person as seen when the user advances off them
+  useEffect(() => {
+    if (loading) {
+      lastSeenPersonRef.current = null;
+      return;
+    }
+    const currentPersonId = items[currentIndex]?.person.userId ?? null;
+    const prev = lastSeenPersonRef.current;
+    if (prev != null && prev !== currentPersonId && !markedSeenRef.current.has(prev)) {
+      markedSeenRef.current.add(prev);
+      api.post("/discover/seen", { seenId: prev }).catch(() => {
+        markedSeenRef.current.delete(prev);
+      });
+    }
+    lastSeenPersonRef.current = currentPersonId;
+  }, [currentIndex, items, loading]);
 
   const handleLike = useCallback(
     async (reelId: string, ownerId: number) => {

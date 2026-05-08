@@ -20,10 +20,17 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
     })
   ).map((l) => l.likeeId);
 
+  const seenIds = (
+    await prisma.seenUser.findMany({
+      where: { viewerId: me.id },
+      select: { seenId: true },
+    })
+  ).map((s) => s.seenId);
+
   const candidates = await prisma.user.findMany({
     where: {
       onboarded: true,
-      id: { notIn: [me.id, ...likedIds] },
+      id: { notIn: [me.id, ...likedIds, ...seenIds] },
       tagVector: { not: null },
     },
     select: {
@@ -70,12 +77,20 @@ router.get("/feed", authMiddleware, async (req: AuthRequest, res: Response) => {
     })
   ).map((l) => l.likeeId);
 
+  // Users already scrolled past
+  const seenIds = (
+    await prisma.seenUser.findMany({
+      where: { viewerId: me.id },
+      select: { seenId: true },
+    })
+  ).map((s) => s.seenId);
+
   const verifiedOnly = req.query.verifiedOnly === "true";
 
   const candidates = await prisma.user.findMany({
     where: {
       onboarded: true,
-      id: { notIn: [me.id, ...likedIds] },
+      id: { notIn: [me.id, ...likedIds, ...seenIds] },
       tagVector: { not: null },
       ...(verifiedOnly ? { worldIdVerified: true } : {}),
     },
@@ -255,6 +270,31 @@ router.post(
     });
 
     res.json({ liked: true, mutual: !!mutual });
+  }
+);
+
+// Mark a user as seen / scrolled past
+router.post(
+  "/seen",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const { seenId } = req.body;
+    if (typeof seenId !== "number") {
+      res.status(400).json({ error: "seenId is required" });
+      return;
+    }
+    if (seenId === req.userId) {
+      res.status(400).json({ error: "Cannot mark yourself as seen" });
+      return;
+    }
+
+    await prisma.seenUser.upsert({
+      where: { viewerId_seenId: { viewerId: req.userId!, seenId } },
+      create: { viewerId: req.userId!, seenId },
+      update: {},
+    });
+
+    res.json({ seen: true });
   }
 );
 
