@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import {
   View,
   Text,
@@ -346,8 +346,14 @@ export default function DiscoverScreen() {
   const [visibleIndex, setVisibleIndex] = useState(0);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
 
+  const lastSeenPersonRef = useRef<number | null>(null);
+  const markedSeenRef = useRef<Set<number>>(new Set());
+
   useEffect(() => {
     setLoading(true);
+    setVisibleIndex(0);
+    lastSeenPersonRef.current = null;
+    markedSeenRef.current.clear();
     const qs = verifiedOnly ? '?verifiedOnly=true' : '';
     api
       .get<FeedResponse>(`/discover/feed${qs}`)
@@ -369,13 +375,32 @@ export default function DiscoverScreen() {
       .finally(() => setLoading(false));
   }, [verifiedOnly]);
 
-  const items: FeedItem[] = [];
-  for (const person of feed) {
-    items.push({ kind: 'intro', person, key: `intro-${person.userId}` });
-    person.reels.forEach((reel, index) => {
-      items.push({ kind: 'reel', person, reelId: reel.reelId, videoUrl: reel.videoUrl, index, key: `reel-${reel.reelId}` });
-    });
-  }
+  const items = useMemo<FeedItem[]>(() => {
+    const out: FeedItem[] = [];
+    for (const person of feed) {
+      out.push({ kind: 'intro', person, key: `intro-${person.userId}` });
+      person.reels.forEach((reel, index) => {
+        out.push({ kind: 'reel', person, reelId: reel.reelId, videoUrl: reel.videoUrl, index, key: `reel-${reel.reelId}` });
+      });
+    }
+    return out;
+  }, [feed]);
+
+  useEffect(() => {
+    if (loading) {
+      lastSeenPersonRef.current = null;
+      return;
+    }
+    const currentPersonId = items[visibleIndex]?.person.userId ?? null;
+    const prev = lastSeenPersonRef.current;
+    if (prev != null && prev !== currentPersonId && !markedSeenRef.current.has(prev)) {
+      markedSeenRef.current.add(prev);
+      api.post('/discover/seen', { seenId: prev }).catch(() => {
+        markedSeenRef.current.delete(prev);
+      });
+    }
+    lastSeenPersonRef.current = currentPersonId;
+  }, [visibleIndex, items, loading]);
 
   const handleLike = useCallback(async (reelId: string, ownerId: number) => {
     setLikedReelIds((prev) => new Set(prev).add(reelId));

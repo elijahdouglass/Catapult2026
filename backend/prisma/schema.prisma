@@ -30,6 +30,22 @@ model User {
   reelViews     ReelView[]
   reelLikesGiven ReelLike[] @relation("ReelLikerRelation")
   reelLikesReceived ReelLike[] @relation("ReelOwnerRelation")
+  seenGiven     SeenUser[] @relation("SeenViewer")
+  seenReceived  SeenUser[] @relation("SeenTarget")
+}
+
+model SeenUser {
+  id       Int      @id @default(autoincrement())
+  viewerId Int
+  seenId   Int
+  seenAt   DateTime @default(now())
+
+  viewer User @relation("SeenViewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  seen   User @relation("SeenTarget", fields: [seenId], references: [id], onDelete: Cascade)
+
+  @@unique([viewerId, seenId])
+  @@index([viewerId])
+  @@index([seenId])
 }
 
 model Like {
