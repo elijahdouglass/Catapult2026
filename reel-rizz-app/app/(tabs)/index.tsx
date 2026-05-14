@@ -15,6 +15,8 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import * as Haptics from 'expo-haptics';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   FadeIn,
   FadeInUp,
@@ -23,6 +25,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withSequence,
+  runOnJS,
 } from 'react-native-reanimated';
 import { api } from '@/api/client';
 import { Colors } from '@/constants/theme';
@@ -161,10 +164,29 @@ const ReelSlide = memo(function ReelSlide({
     }
   };
 
+  const triggerDoubleTapLike = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (liked) return;
+    onLike(item.reelId, item.person.userId);
+    heartScale.value = withSequence(
+      withSpring(1.4, { damping: 4 }),
+      withSpring(1, { damping: 6 })
+    );
+  };
+
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .maxDuration(250)
+    .onEnd((_e, success) => {
+      if (!success) return;
+      runOnJS(triggerDoubleTapLike)();
+    });
+
   const reelLabel = `${item.index + 1}/${item.person.reels.length}`;
 
   return (
-    <View style={[styles.slide, { height: slideHeight }]}>
+    <GestureDetector gesture={doubleTap}>
+      <View style={[styles.slide, { height: slideHeight }]}>
       {loading ? (
         <View style={styles.shimmer}>
           <ActivityIndicator color={Colors.rose500} size="large" />
@@ -233,7 +255,8 @@ const ReelSlide = memo(function ReelSlide({
           <Text style={styles.likeSlash}>/{threshold}</Text>
         </View>
       </View>
-    </View>
+      </View>
+    </GestureDetector>
   );
 });
 
