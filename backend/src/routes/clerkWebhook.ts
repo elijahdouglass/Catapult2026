@@ -70,12 +70,33 @@ router.post("/", async (req: Request, res: Response) => {
           const userOverrode =
             byClerkId.derivedDisplayName !== null &&
             byClerkId.displayName !== byClerkId.derivedDisplayName;
-          await prisma.user.update({
-            where: { clerkId: data.id },
-            data: userOverrode
-              ? { email, derivedDisplayName: displayName }
-              : { email, displayName, derivedDisplayName: displayName },
-          });
+          const fullData = userOverrode
+            ? { email, derivedDisplayName: displayName }
+            : { email, displayName, derivedDisplayName: displayName };
+          try {
+            await prisma.user.update({
+              where: { clerkId: data.id },
+              data: fullData,
+            });
+          } catch (err) {
+            // The incoming Clerk email is already held by a different local
+            // row (a still-unlinked seed row, or a row owned by another
+            // linked Clerk user). Refusing to ack would have Clerk retry the
+            // webhook forever; instead, skip the email field, still refresh
+            // displayName tracking, and surface a warning for the operator.
+            if (isUniqueViolationOn(err, ["email"])) {
+              const { email: _omit, ...withoutEmail } = fullData;
+              console.warn(
+                `Clerk webhook ${evt.type}: email ${email} already held by another local row; updating ${data.id} without email field`
+              );
+              await prisma.user.update({
+                where: { clerkId: data.id },
+                data: withoutEmail,
+              });
+            } else {
+              throw err;
+            }
+          }
           break;
         }
 

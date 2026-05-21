@@ -30,6 +30,19 @@ function isUniqueViolationOn(err: unknown, fields: string[]): boolean {
   return list.some((t) => fields.includes(t));
 }
 
+// Thrown by `resolveLocalUser` when the Clerk user's email is already linked
+// to a different local row. Surfaced as a typed error so `authMiddleware`
+// (and `verifyClerkSessionToken`) can return a stable 409 + machine-readable
+// code instead of an opaque 500, which the user can hit permanently after a
+// successful Clerk signup.
+export class EmailLinkedElsewhereError extends Error {
+  readonly code = "email_conflict";
+  constructor(public email: string, public clerkUserId: string, public existingClerkId: string) {
+    super("Email already linked to a different Clerk user");
+    this.name = "EmailLinkedElsewhereError";
+  }
+}
+
 // Resolve a Clerk-authenticated request to a local User row, creating one on
 // first sight. Clerk owns identity; we still need an integer userId so the
 // existing Prisma relations (likes, reels, etc.) don't have to change.
@@ -67,7 +80,7 @@ async function resolveLocalUser(clerkUserId: string): Promise<number> {
       console.error(
         `resolveLocalUser: local row for ${email} is already linked to clerkId ${byEmail.clerkId}; refusing to re-link to ${clerkUserId}`
       );
-      throw new Error("Email already linked to a different Clerk user");
+      throw new EmailLinkedElsewhereError(email, clerkUserId, byEmail.clerkId);
     }
     // Atomic adoption: include the `clerkId IS NULL` precondition in the
     // write itself so two concurrent adoptions of the same email can't both
@@ -85,7 +98,11 @@ async function resolveLocalUser(clerkUserId: string): Promise<number> {
     console.error(
       `resolveLocalUser: email ${email} adoption lost race to ${after?.clerkId ?? "unknown"}; refusing to re-link to ${clerkUserId}`
     );
-    throw new Error("Email already linked to a different Clerk user");
+    throw new EmailLinkedElsewhereError(
+      email,
+      clerkUserId,
+      after?.clerkId ?? "unknown"
+    );
   }
 
   try {
@@ -132,7 +149,11 @@ async function resolveLocalUser(clerkUserId: string): Promise<number> {
       console.error(
         `resolveLocalUser: email ${email} raced into a row linked to ${raced?.clerkId ?? "unknown"}; refusing to re-link to ${clerkUserId}`
       );
-      throw new Error("Email already linked to a different Clerk user");
+      throw new EmailLinkedElsewhereError(
+        email,
+        clerkUserId,
+        raced?.clerkId ?? "unknown"
+      );
     }
     console.error("resolveLocalUser create failed:", err);
     throw err;
@@ -155,6 +176,18 @@ export async function authMiddleware(
     req.userId = await resolveLocalUser(auth.userId);
     next();
   } catch (err) {
+    // Distinguish a "this Clerk user's email collides with an existing local
+    // row" failure (permanent without operator intervention) from a transient
+    // infra failure (Prisma down, Clerk API timeout, etc.). The frontend uses
+    // `code` to render a user-actionable message instead of a generic retry.
+    if (err instanceof EmailLinkedElsewhereError) {
+      res.status(409).json({
+        code: err.code,
+        error:
+          "This email is already linked to another account in our system. Please contact support.",
+      });
+      return;
+    }
     console.error("Auth resolution error:", err);
     res.status(500).json({ error: "Failed to resolve user" });
   }
@@ -173,7 +206,17 @@ export async function verifyClerkSessionToken(
     if (!claims.sub) return null;
     return await resolveLocalUser(claims.sub);
   } catch (err) {
-    console.error("Clerk token verification failed:", err);
+    // Log the email-conflict case distinctly so an operator can recognize it
+    // in the WorldID verify-page flow (where we can only return null and the
+    // page surfaces "Invalid token"). The caller has no way to distinguish
+    // an expired/forged token from a permanent identity collision.
+    if (err instanceof EmailLinkedElsewhereError) {
+      console.error(
+        `verifyClerkSessionToken: ${err.message} (clerkUserId=${err.clerkUserId}, email=${err.email})`
+      );
+    } else {
+      console.error("Clerk token verification failed:", err);
+    }
     return null;
   }
 }

@@ -95,8 +95,16 @@ async function main() {
     });
   }
 
-  // Create users. Auth is owned by Clerk; seeded rows are local-only and have
-  // no clerkId — they exist for discovery/matching demo data.
+  // Create users. Auth is owned by Clerk; seeded rows exist purely as demo
+  // data for discovery/matching. They are stamped with a sentinel clerkId
+  // ("seed:<idx>") so the adopt-by-email path in `resolveLocalUser` and the
+  // Clerk webhook — which both only adopt rows where `clerkId IS NULL` —
+  // can never hand a seeded row to a real Clerk signup. Without this guard,
+  // because seed emails are public in the repo, anyone could sign up at
+  // Clerk with e.g. `jake_fitguy@test.com` and inherit Jake's igUsername,
+  // igVerified, worldIdVerified, matches, and reels on first authenticated
+  // request. derivedDisplayName is set so the post-adoption refresh path
+  // sees `displayName === derivedDisplayName` and behaves consistently.
   const createdUsers: { id: number; idx: number }[] = [];
 
   for (let i = 0; i < users.length; i++) {
@@ -105,17 +113,35 @@ async function main() {
     console.log(`Computing vector for ${u.displayName}...`);
     const tagVector = await computeTagVector(tagList);
 
-    const existing = await prisma.user.findUnique({ where: { email: u.email } });
+    const existing = await prisma.user.findUnique({
+      where: { email: u.email },
+      select: { id: true, clerkId: true },
+    });
     if (existing) {
-      console.log(`  Skipping ${u.email} (already exists, id=${existing.id})`);
+      // Backfill the sentinel clerkId on rows created by an earlier seed run
+      // (before this guard existed) so they stop being adoption-eligible.
+      // Skip rows that already have a clerkId — those either already have
+      // the sentinel or were claimed by a real Clerk user, neither of which
+      // we should overwrite.
+      if (existing.clerkId === null) {
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: { clerkId: `seed:${i}` },
+        });
+        console.log(`  Backfilled sentinel clerkId on ${u.email} (id=${existing.id})`);
+      } else {
+        console.log(`  Skipping ${u.email} (already exists, id=${existing.id})`);
+      }
       createdUsers.push({ id: existing.id, idx: i });
       continue;
     }
 
     const created = await prisma.user.create({
       data: {
+        clerkId: `seed:${i}`,
         email: u.email,
         displayName: u.displayName,
+        derivedDisplayName: u.displayName,
         igUsername: u.igUsername,
         tags: u.tags,
         tagVector: new Uint8Array(tagVector.buffer as ArrayBuffer),
