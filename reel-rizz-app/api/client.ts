@@ -12,8 +12,17 @@ export function setTokenGetter(fn: TokenGetter | null) {
 // Backwards-compatible helper used by world-id-verify to embed the token in a
 // URL for the SFSafariViewController bridge. With Clerk this returns the
 // short-lived session JWT; the backend's verifyClerkSessionToken accepts it.
+// Returns null if AuthProvider hasn't finished mounting yet — callers that
+// can't tolerate that (e.g. the WorldID bridge) should wait for the user to
+// be loaded before invoking this.
 export async function getToken(): Promise<string | null> {
-  return tokenGetter ? tokenGetter() : null;
+  if (!tokenGetter) {
+    console.warn(
+      "api/client.getToken called before AuthProvider installed a token getter; the request will be sent unauthenticated.",
+    );
+    return null;
+  }
+  return tokenGetter();
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {

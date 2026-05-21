@@ -43,6 +43,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Clean up the legacy JWT key from before the Clerk switch. Harmless if
+  // absent; just stops a stale value from sitting in storage forever.
+  useEffect(() => {
+    try {
+      localStorage.removeItem("token");
+    } catch {
+      // localStorage may be unavailable in private-browsing contexts.
+    }
+  }, []);
+
   // Make the api/client able to attach a fresh Clerk session token to every
   // outgoing request without a circular import.
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { randomBytes } from "crypto";
 import { verifyWebhook } from "@clerk/express/webhooks";
+import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 
 const router = Router();
@@ -13,6 +14,15 @@ function generateIgVerifyCode(): string {
   let out = "";
   for (let i = 0; i < 8; i++) out += ALPHABET[bytes[i] % ALPHABET.length];
   return out;
+}
+
+function isUniqueViolationOn(err: unknown, fields: string[]): boolean {
+  if (!(err instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (err.code !== "P2002") return false;
+  const target = (err.meta as { target?: string | string[] } | undefined)?.target;
+  if (!target) return false;
+  const list = Array.isArray(target) ? target : [target];
+  return list.some((t) => fields.includes(t));
 }
 
 // Keeps the local User row in sync with Clerk-owned identity data. Mounted
@@ -46,18 +56,50 @@ router.post("/", async (req: Request, res: Response) => {
           data.username ||
           email.split("@")[0];
 
-        await prisma.user.upsert({
+        // Existing row by clerkId: refresh email, and refresh displayName
+        // only if it still matches what we'd derive from Clerk (i.e. the
+        // user hasn't overridden it via PATCH /auth/profile).
+        const byClerkId = await prisma.user.findUnique({
           where: { clerkId: data.id },
-          // Don't clobber a displayName the user has personalised in-app;
-          // only refresh the email (which Clerk owns).
-          update: { email },
-          create: {
-            clerkId: data.id,
-            email,
-            displayName,
-            igVerifyCode: generateIgVerifyCode(),
-          },
+          select: { id: true, displayName: true },
         });
+        if (byClerkId) {
+          const shouldRefreshName = byClerkId.displayName !== displayName;
+          await prisma.user.update({
+            where: { clerkId: data.id },
+            data: shouldRefreshName ? { email, displayName } : { email },
+          });
+          break;
+        }
+
+        // No row yet for this clerkId. Try to create; if the email is
+        // already taken (seed data, or a user that existed before Clerk
+        // was wired in), adopt that row by stamping clerkId on it.
+        try {
+          await prisma.user.create({
+            data: {
+              clerkId: data.id,
+              email,
+              displayName,
+              igVerifyCode: generateIgVerifyCode(),
+            },
+          });
+        } catch (err) {
+          if (isUniqueViolationOn(err, ["email"])) {
+            await prisma.user.update({
+              where: { email },
+              data: { clerkId: data.id },
+            });
+          } else if (isUniqueViolationOn(err, ["clerkId"])) {
+            // Concurrent create on the same clerkId — already linked.
+            await prisma.user.update({
+              where: { clerkId: data.id },
+              data: { email },
+            });
+          } else {
+            throw err;
+          }
+        }
         break;
       }
       case "user.deleted": {

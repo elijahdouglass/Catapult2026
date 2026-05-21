@@ -14,7 +14,7 @@ model User {
   passwordHash   String?
   displayName    String
   igUserId       String?  @unique
-  igUsername      String?
+  igUsername     String?  @unique
   igVerified     Boolean  @default(false)
   igVerifyCode   String?
   tags           String?  @db.Text

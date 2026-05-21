@@ -7,6 +7,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@clerk/backend": "^3.4.11",
     "@clerk/express": "^2.1.19",
     "@prisma/client": "^6.5.0",
     "@worldcoin/idkit-server": "^1.1.0",

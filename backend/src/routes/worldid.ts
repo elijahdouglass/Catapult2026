@@ -37,11 +37,17 @@ router.get("/verify-page", async (req: AuthRequest, res: Response) => {
     ttl: 300,
   });
 
-  const tokenVal = (req.query.token as string) || req.headers.authorization?.replace("Bearer ", "") || "";
+  const tokenVal = token;
 
   const apiBase = `${req.protocol}://${req.get("host")}`;
 
-  res.setHeader("Content-Type", "text/html");
+  // The page embeds a short-lived Clerk session token. Prevent intermediate
+  // caches from storing it and stop the browser from leaking the URL (which
+  // also contains the token as ?token=…) to the IDKit deep link.
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store, private");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Referrer-Policy", "no-referrer");
   res.send(`<!DOCTYPE html>
 <html>
 <head>

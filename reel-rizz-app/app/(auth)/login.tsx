@@ -17,7 +17,10 @@ import { useSignIn, useSignUp } from '@clerk/clerk-expo';
 import { Colors } from '@/constants/theme';
 
 type Mode = 'login' | 'register';
-type Step = 'form' | 'email-code';
+// 'email-code' covers two flows: the email-verification step after sign-up,
+// and the first-factor email code when sign-in returns `needs_first_factor`
+// with email_code as the only/preferred strategy.
+type Step = 'form' | 'email-code' | 'signin-email-code';
 
 // Clerk-backed sign-in / sign-up. Two-step sign-up: collect the form, then
 // prompt for the email verification code Clerk sends. After session is
@@ -39,10 +42,48 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const result = await signIn.create({ identifier: email, password });
-      if (result.status === 'complete') {
-        await setActiveSignIn({ session: result.createdSessionId });
-      } else {
-        Alert.alert('Sign-in incomplete', `Status: ${result.status}`);
+      switch (result.status) {
+        case 'complete':
+          await setActiveSignIn({ session: result.createdSessionId });
+          return;
+        case 'needs_first_factor': {
+          // Password didn't satisfy the first factor (e.g. passwordless
+          // user, or instance configured for email-code only). Fall back
+          // to email_code if it's offered.
+          const emailFactor = result.supportedFirstFactors?.find(
+            (f) => f.strategy === 'email_code',
+          ) as { emailAddressId: string } | undefined;
+          if (emailFactor) {
+            await signIn.prepareFirstFactor({
+              strategy: 'email_code',
+              emailAddressId: emailFactor.emailAddressId,
+            });
+            setStep('signin-email-code');
+            return;
+          }
+          Alert.alert(
+            'Additional sign-in step required',
+            'Your account requires a sign-in method this app doesn\u2019t support yet. Please sign in on the web.',
+          );
+          return;
+        }
+        case 'needs_second_factor':
+          Alert.alert(
+            'Two-factor authentication required',
+            'Please sign in on the web to complete two-factor authentication, then return to the app.',
+          );
+          return;
+        case 'needs_new_password':
+          Alert.alert(
+            'Password reset required',
+            'Please reset your password on the web before signing in.',
+          );
+          return;
+        case 'needs_identifier':
+          Alert.alert('Sign-in', 'Please enter your email and try again.');
+          return;
+        default:
+          Alert.alert('Sign-in incomplete', `Status: ${result.status}`);
       }
     } catch (err: any) {
       Alert.alert('Error', err?.errors?.[0]?.message || err.message || 'Sign-in failed');
@@ -82,8 +123,26 @@ export default function LoginScreen() {
     }
   };
 
+  const handleSignInEmailCode = async () => {
+    if (!signInLoaded || !signIn) return;
+    setLoading(true);
+    try {
+      const result = await signIn.attemptFirstFactor({ strategy: 'email_code', code });
+      if (result.status === 'complete') {
+        await setActiveSignIn({ session: result.createdSessionId });
+      } else {
+        Alert.alert('Sign-in incomplete', `Status: ${result.status}`);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.errors?.[0]?.message || err.message || 'Sign-in failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = () => {
     if (step === 'email-code') return handleVerifyEmail();
+    if (step === 'signin-email-code') return handleSignInEmailCode();
     return mode === 'login' ? handleLogin() : handleRegister();
   };
 
@@ -98,7 +157,7 @@ export default function LoginScreen() {
             <Text style={styles.logoText}>Reel Rizz</Text>
 
             <Text style={styles.title}>
-              {step === 'email-code'
+              {step === 'email-code' || step === 'signin-email-code'
                 ? 'Check your email'
                 : mode === 'login'
                 ? 'Welcome back'
@@ -107,6 +166,8 @@ export default function LoginScreen() {
             <Text style={styles.subtitle}>
               {step === 'email-code'
                 ? `Enter the code we sent to ${email}`
+                : step === 'signin-email-code'
+                ? `Enter the code we sent to ${email} to finish signing in`
                 : mode === 'login'
                 ? 'Sign in to find your match'
                 : 'Create your account and start matching'}
@@ -160,7 +221,7 @@ export default function LoginScreen() {
               </>
             )}
 
-            {step === 'email-code' && (
+            {(step === 'email-code' || step === 'signin-email-code') && (
               <Field label="Verification code">
                 <TextInput
                   style={styles.input}
@@ -187,6 +248,8 @@ export default function LoginScreen() {
                   <Text style={styles.submitText}>
                     {step === 'email-code'
                       ? 'Verify email'
+                      : step === 'signin-email-code'
+                      ? 'Sign in'
                       : mode === 'login'
                       ? 'Sign in'
                       : 'Create account'}

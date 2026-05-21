@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { randomBytes } from "crypto";
 import { clerkClient, getAuth } from "@clerk/express";
+import { verifyToken } from "@clerk/backend";
+import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 
 export interface AuthRequest extends Request {
@@ -16,6 +18,16 @@ function generateIgVerifyCode(): string {
   let out = "";
   for (let i = 0; i < 8; i++) out += ALPHABET[bytes[i] % ALPHABET.length];
   return out;
+}
+
+// True when `err` is a Prisma unique-constraint violation on any of `fields`.
+function isUniqueViolationOn(err: unknown, fields: string[]): boolean {
+  if (!(err instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (err.code !== "P2002") return false;
+  const target = (err.meta as { target?: string | string[] } | undefined)?.target;
+  if (!target) return false;
+  const list = Array.isArray(target) ? target : [target];
+  return list.some((t) => fields.includes(t));
 }
 
 // Resolve a Clerk-authenticated request to a local User row, creating one on
@@ -40,8 +52,6 @@ async function resolveLocalUser(clerkUserId: string): Promise<number> {
     clerkUser.username ||
     email.split("@")[0];
 
-  // Race: webhook may create the row between findUnique and create. Catch the
-  // unique-constraint violation and re-fetch.
   try {
     const created = await prisma.user.create({
       data: {
@@ -53,13 +63,27 @@ async function resolveLocalUser(clerkUserId: string): Promise<number> {
       select: { id: true },
     });
     return created.id;
-  } catch {
-    const after = await prisma.user.findUnique({
-      where: { clerkId: clerkUserId },
-      select: { id: true },
-    });
-    if (!after) throw new Error(`Failed to provision local user for ${clerkUserId}`);
-    return after.id;
+  } catch (err) {
+    // Race: webhook may have created the row between findUnique and create.
+    if (isUniqueViolationOn(err, ["clerkId"])) {
+      const after = await prisma.user.findUnique({
+        where: { clerkId: clerkUserId },
+        select: { id: true },
+      });
+      if (after) return after.id;
+    }
+    // Pre-existing local row for this email (seed data, or a user that
+    // existed before Clerk was wired in). Adopt it by stamping clerkId.
+    if (isUniqueViolationOn(err, ["email"])) {
+      const adopted = await prisma.user.update({
+        where: { email },
+        data: { clerkId: clerkUserId },
+        select: { id: true },
+      });
+      return adopted.id;
+    }
+    console.error("resolveLocalUser create failed:", err);
+    throw err;
   }
 }
 
@@ -91,7 +115,6 @@ export async function verifyClerkSessionToken(
   token: string
 ): Promise<number | null> {
   try {
-    const { verifyToken } = await import("@clerk/backend");
     const claims = await verifyToken(token, {
       secretKey: process.env.CLERK_SECRET_KEY,
     });

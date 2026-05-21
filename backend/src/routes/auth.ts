@@ -1,6 +1,14 @@
 import { Router, Response } from "express";
+import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { authMiddleware, AuthRequest } from "../middleware/auth";
+
+// Canonical form for IG handles: strip leading "@", trim, lowercase. Applied
+// at the only write-time entry point (PATCH /auth/profile) and mirrored in
+// seed.ts so the DB only ever stores normalized values.
+function normalizeIgUsername(raw: string): string {
+  return raw.trim().replace(/^@/, "").trim().toLowerCase();
+}
 
 // Clerk owns sign-up and sign-in; this router only exposes read-only session
 // helpers backed by the local user row resolved in `authMiddleware`.
@@ -96,7 +104,12 @@ router.patch(
           res.status(403).json({ error: "IG handle is locked once verified" });
           return;
         }
-        data.igUsername = igUsername.trim().replace(/^@/, "");
+        const normalized = normalizeIgUsername(igUsername);
+        if (!normalized) {
+          res.status(400).json({ error: "IG handle is empty" });
+          return;
+        }
+        data.igUsername = normalized;
       }
       if (typeof displayName === "string" && displayName.trim()) {
         data.displayName = displayName.trim();
@@ -106,7 +119,23 @@ router.patch(
         return;
       }
 
-      await prisma.user.update({ where: { id: req.userId! }, data });
+      try {
+        await prisma.user.update({ where: { id: req.userId! }, data });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === "P2002"
+        ) {
+          const target = (err.meta as { target?: string | string[] } | undefined)
+            ?.target;
+          const fields = Array.isArray(target) ? target : target ? [target] : [];
+          if (fields.includes("igUsername")) {
+            res.status(409).json({ error: "IG handle already claimed" });
+            return;
+          }
+        }
+        throw err;
+      }
       res.json({ ok: true });
     } catch (error) {
       console.error("Auth/profile update error:", error);
