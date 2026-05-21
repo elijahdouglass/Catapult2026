@@ -12,7 +12,7 @@ Built for Catapult 2026 at Purdue.
 - **Mobile:** React Native + Expo Router
 - **Chrome extension:** React + Vite (CRX)
 - **OCR / embeddings:** Tesseract + sentence-transformers
-- **Auth / proof of personhood:** JWT + Worldcoin IDKit
+- **Auth:** Clerk (managed; Instagram OAuth, social, magic links) + Worldcoin IDKit for proof of personhood
 - Runs entirely on localhost — no hosting.
 
 ## Components
@@ -57,6 +57,26 @@ cd Catapult2026
 ### 1. Database
 
 Create a MySQL database named `reelrizz` and update `backend/.env` with your connection string. An example `.env` is already in the repo for local dev.
+
+### 1b. Clerk
+
+Auth is handled by [Clerk](https://clerk.com). Create a free Clerk application, then set in `backend/.env`:
+
+```
+CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+CLERK_WEBHOOK_SIGNING_SECRET=whsec_...
+```
+
+In the Clerk dashboard, add a webhook pointing at `http://<your-tunnel>/api/clerk/webhook` (use ngrok or similar for local dev) and subscribe to `user.created`, `user.updated`, and `user.deleted` events. Copy the signing secret into `CLERK_WEBHOOK_SIGNING_SECRET`. The backend syncs Clerk identity into the local `User` table on first authenticated request and via this webhook.
+
+Each frontend needs the **publishable** key too. Copy the matching `.env.example` to `.env` in each package and fill in:
+
+- `frontend/.env` — `VITE_CLERK_PUBLISHABLE_KEY`
+- `reel-rizz-app/.env` — `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `reel-rizz-reader/.env` — `VITE_CLERK_PUBLISHABLE_KEY` (and optionally `VITE_CLERK_SYNC_HOST` to share a session with the web app)
+
+The Chrome extension also needs a **stable extension ID** — add a Chrome Extension app in the Clerk dashboard, copy the manifest `key` it gives you, and export it as `CRX_KEY` before `npm run build` so the manifest pins the ID Clerk has whitelisted.
 
 ### 2. Python OCR env
 

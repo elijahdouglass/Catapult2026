@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import path from "path";
+import { clerkMiddleware } from "@clerk/express";
 import authRoutes from "./routes/auth";
 import onboardingRoutes from "./routes/onboarding";
 import discoverRoutes from "./routes/discover";
@@ -10,6 +11,13 @@ import reelsRoutes from "./routes/reels";
 import videoRoutes from "./routes/video";
 import webhookRoutes from "./routes/webhook";
 import worldidRoutes from "./routes/worldid";
+import clerkWebhookRoutes from "./routes/clerkWebhook";
+
+if (!process.env.CLERK_SECRET_KEY || !process.env.CLERK_PUBLISHABLE_KEY) {
+  throw new Error(
+    "CLERK_SECRET_KEY and CLERK_PUBLISHABLE_KEY environment variables are required"
+  );
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -36,7 +44,16 @@ app.use(
     },
   })
 );
+// Clerk webhook needs the raw request body for Svix signature verification,
+// so it's mounted before the JSON parser with its own raw body parser.
+app.use(
+  "/api/clerk/webhook",
+  express.raw({ type: "application/json" }),
+  clerkWebhookRoutes
+);
+
 app.use(express.json());
+app.use(clerkMiddleware());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/onboarding", onboardingRoutes);

@@ -1,116 +1,108 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import {
+  ClerkProvider,
+  ClerkLoaded,
+  SignIn,
+  useAuth,
+  useUser,
+} from '@clerk/chrome-extension'
 import './Popup.css'
 
-const API_BASE = 'http://localhost:3001/api'
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as
+  | string
+  | undefined
+const SYNC_HOST = import.meta.env.VITE_CLERK_SYNC_HOST as string | undefined
+const API_BASE =
+  (import.meta.env.VITE_API_BASE as string | undefined) ??
+  'http://localhost:3001/api'
 
-export const Popup = () => {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loggedIn, setLoggedIn] = useState(false)
-  const [userName, setUserName] = useState('')
-  const [error, setError] = useState('')
-  const [reelCount, setReelCount] = useState<number | null>(null)
+if (!PUBLISHABLE_KEY) {
+  throw new Error(
+    'Missing VITE_CLERK_PUBLISHABLE_KEY — set it in reel-rizz-reader/.env'
+  )
+}
+
+function ReelCount() {
+  const { getToken } = useAuth()
+  const { user } = useUser()
+  const [count, setCount] = useState<number | null>(null)
 
   useEffect(() => {
-    chrome.storage.sync.get(['token'], async (result) => {
-      if (result.token) {
-        try {
-          const res = await fetch(`${API_BASE}/auth/me`, {
-            headers: { Authorization: `Bearer ${result.token}` },
-          })
-          if (res.ok) {
-            const data = await res.json()
-            setLoggedIn(true)
-            setUserName(data.user.displayName)
-            fetchReelCount(result.token)
-          } else {
-            chrome.storage.sync.remove('token')
-          }
-        } catch {
-          // backend offline
-        }
-      }
-    })
-  }, [])
-
-  async function fetchReelCount(token: string) {
-    try {
-      const res = await fetch(`${API_BASE}/reels`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
+    let cancelled = false
+    ;(async () => {
+      const token = await getToken()
+      if (!token) return
+      try {
+        const res = await fetch(`${API_BASE}/reels`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) return
         const data = await res.json()
-        setReelCount(data.views.length)
+        if (!cancelled) setCount(data.views?.length ?? 0)
+      } catch {
+        // backend offline
       }
-    } catch {
-      // ignore
+    })()
+    return () => {
+      cancelled = true
     }
-  }
-
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
-    try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: email, password }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error || 'Login failed')
-        return
-      }
-      chrome.storage.sync.set({ token: data.token })
-      setLoggedIn(true)
-      setUserName(data.user.displayName)
-      fetchReelCount(data.token)
-    } catch {
-      setError('Could not reach server')
-    }
-  }
-
-  function handleLogout() {
-    chrome.storage.sync.remove('token')
-    setLoggedIn(false)
-    setUserName('')
-    setReelCount(null)
-  }
-
-  if (loggedIn) {
-    return (
-      <main>
-        <h3>Reel Rizz Reader</h3>
-        <p>Logged in as <strong>{userName}</strong></p>
-        {reelCount !== null && <p>{reelCount} reel{reelCount !== 1 ? 's' : ''} tracked</p>}
-        <p className="hint">Browse Instagram reels — they'll be tracked automatically.</p>
-        <button onClick={handleLogout} className="btn">Log out</button>
-      </main>
-    )
-  }
+  }, [getToken])
 
   return (
     <main>
       <h3>Reel Rizz Reader</h3>
-      <form onSubmit={handleLogin}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        {error && <p className="error">{error}</p>}
-        <button type="submit" className="btn">Log in</button>
-      </form>
+      <p>
+        Logged in as{' '}
+        <strong>
+          {user?.firstName ?? user?.username ?? user?.primaryEmailAddress?.emailAddress ?? 'you'}
+        </strong>
+      </p>
+      {count !== null && (
+        <p>
+          {count} reel{count !== 1 ? 's' : ''} tracked
+        </p>
+      )}
+      <p className="hint">
+        Browse Instagram reels — they'll be tracked automatically.
+      </p>
     </main>
+  )
+}
+
+function AuthGate() {
+  const { isLoaded, isSignedIn } = useAuth()
+  if (!isLoaded) {
+    return (
+      <main>
+        <h3>Reel Rizz Reader</h3>
+        <p className="hint">Loading…</p>
+      </main>
+    )
+  }
+  if (!isSignedIn) {
+    return (
+      <main>
+        <h3>Reel Rizz Reader</h3>
+        <SignIn routing="hash" />
+      </main>
+    )
+  }
+  return <ReelCount />
+}
+
+export const Popup = () => {
+  return (
+    <ClerkProvider
+      publishableKey={PUBLISHABLE_KEY}
+      // Optional: sync session with a hosted Clerk app running at this URL
+      // so the extension shares auth with the web frontend.
+      syncHost={SYNC_HOST}
+      afterSignOutUrl="/"
+    >
+      <ClerkLoaded>
+        <AuthGate />
+      </ClerkLoaded>
+    </ClerkProvider>
   )
 }
 

@@ -1,144 +1,23 @@
-import { Router, Request, Response } from "express";
-import crypto from "crypto";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import rateLimit from "express-rate-limit";
+import { Router, Response } from "express";
+import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { authMiddleware, AuthRequest } from "../middleware/auth";
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET environment variable is required");
+// Canonical form for IG handles: strip leading "@"s, trim, lowercase. Applied
+// at the only write-time entry point (PATCH /auth/profile) and mirrored in
+// seed.ts so the DB only ever stores normalized values. The `/^@+/` regex
+// strips a run of consecutive leading "@" characters, which matches MySQL's
+// `TRIM(LEADING '@' FROM ...)` used by the unique-index migration — both
+// stop at the first non-`@` character, so e.g. `"@ @alice"` normalizes to
+// `"@alice"` on both sides.
+function normalizeIgUsername(raw: string): string {
+  return raw.trim().replace(/^@+/, "").trim().toLowerCase();
 }
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 15,
-  message: { error: "Too many attempts, please try again later" },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// Clerk owns sign-up and sign-in; this router only exposes read-only session
+// helpers backed by the local user row resolved in `authMiddleware`.
 
 const router = Router();
-
-function generateVerifyCode(): string {
-  return crypto.randomBytes(3).toString("hex").toUpperCase();
-}
-
-// ─── Register ───────────────────────────────────────────────────────
-
-router.post(
-  "/register",
-  authLimiter,
-  async (req: Request, res: Response) => {
-    try {
-      const { email, password, displayName, igUsername } = req.body;
-      if (!email || !password || !displayName || !igUsername) {
-        res.status(400).json({ error: "Missing required fields" });
-        return;
-      }
-
-      const existing = await prisma.user.findUnique({ where: { email } });
-      if (existing) {
-        res.status(409).json({ error: "Email already registered" });
-        return;
-      }
-
-      const passwordHash = await bcrypt.hash(password, 10);
-      const verifyCode = generateVerifyCode();
-
-      const user = await prisma.user.create({
-        data: {
-          email,
-          passwordHash,
-          displayName,
-          igUsername,
-          igVerifyCode: verifyCode,
-          igVerified: false,
-        },
-      });
-
-      const token = jwt.sign({ userId: user.id }, JWT_SECRET, {
-        expiresIn: "7d",
-      });
-
-      res.json({
-        token,
-        verifyCode,
-        user: {
-          id: user.id,
-          email: user.email,
-          displayName: user.displayName,
-          igUsername: user.igUsername,
-          igVerified: user.igVerified,
-          onboarded: user.onboarded,
-          worldIdVerified: user.worldIdVerified,
-        },
-      });
-    } catch (error) {
-      console.error("Registration error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  }
-);
-
-// ─── Login (by email, display name, or IG username) ─────────────────
-
-router.post(
-  "/login",
-  authLimiter,
-  async (req: Request, res: Response) => {
-    try {
-      const { username, password } = req.body;
-      if (!username || !password) {
-        res.status(400).json({ error: "Missing required fields" });
-        return;
-      }
-
-      // Try to find user by email, display name, or IG username
-      const user = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { email: username },
-            { displayName: username },
-            { igUsername: username },
-          ],
-        },
-      });
-
-      const dummyHash =
-        "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012";
-      const valid = await bcrypt.compare(
-        password,
-        user?.passwordHash ?? dummyHash
-      );
-      if (!user || !valid) {
-        res.status(401).json({ error: "Invalid credentials" });
-        return;
-      }
-
-      const token = jwt.sign({ userId: user.id }, JWT_SECRET, {
-        expiresIn: "7d",
-      });
-
-      res.json({
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          displayName: user.displayName,
-          onboarded: user.onboarded,
-          igUsername: user.igUsername,
-          igVerified: user.igVerified,
-          worldIdVerified: user.worldIdVerified,
-        },
-      });
-    } catch (error) {
-      console.error("Login error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  }
-);
 
 // ─── Verification status polling ────────────────────────────────────
 
@@ -188,12 +67,82 @@ router.get(
           onboarded: user.onboarded,
           igUsername: user.igUsername,
           igVerified: user.igVerified,
+          // The verify code is only meaningful while a user hasn't yet
+          // proven they own the IG handle. Once verified, hide it.
+          igVerifyCode: user.igVerified ? undefined : user.igVerifyCode ?? undefined,
           tags: user.tags,
           worldIdVerified: user.worldIdVerified,
         },
       });
     } catch (error) {
       console.error("Auth/me error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ─── Profile self-update ────────────────────────────────────────────
+//
+// Clerk owns identity (email, name); this endpoint covers fields Clerk
+// doesn't know about — the IG handle the user is claiming and an optional
+// display-name override. Only allowed while still unverified so a malicious
+// client can't swap handles post-verification.
+router.patch(
+  "/profile",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { igUsername, displayName } = req.body ?? {};
+      const user = await prisma.user.findUnique({
+        where: { id: req.userId! },
+        select: { igVerified: true },
+      });
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      const data: { igUsername?: string; displayName?: string } = {};
+      if (typeof igUsername === "string" && igUsername.trim()) {
+        if (user.igVerified) {
+          res.status(403).json({ error: "IG handle is locked once verified" });
+          return;
+        }
+        const normalized = normalizeIgUsername(igUsername);
+        if (!normalized) {
+          res.status(400).json({ error: "IG handle is empty" });
+          return;
+        }
+        data.igUsername = normalized;
+      }
+      if (typeof displayName === "string" && displayName.trim()) {
+        data.displayName = displayName.trim();
+      }
+      if (Object.keys(data).length === 0) {
+        res.status(400).json({ error: "Nothing to update" });
+        return;
+      }
+
+      try {
+        await prisma.user.update({ where: { id: req.userId! }, data });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === "P2002"
+        ) {
+          const target = (err.meta as { target?: string | string[] } | undefined)
+            ?.target;
+          const fields = Array.isArray(target) ? target : target ? [target] : [];
+          if (fields.includes("igUsername")) {
+            res.status(409).json({ error: "IG handle already claimed" });
+            return;
+          }
+        }
+        throw err;
+      }
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Auth/profile update error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   }

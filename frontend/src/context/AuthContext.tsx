@@ -1,11 +1,13 @@
 import {
   createContext,
+  useCallback,
   useContext,
-  useState,
   useEffect,
+  useState,
   ReactNode,
 } from "react";
-import { api } from "../api/client";
+import { useAuth as useClerkAuth, useUser } from "@clerk/clerk-react";
+import { api, ApiError, setTokenGetter } from "../api/client";
 
 interface User {
   id: number;
@@ -14,83 +16,97 @@ interface User {
   onboarded: boolean;
   igUsername?: string;
   igVerified?: boolean;
+  igVerifyCode?: string;
   tags?: string;
   worldIdVerified: boolean;
+}
+
+// Permanent (operator-action-required) failures surfaced by /auth/me, parsed
+// from the backend's structured 409 body. Today the only such code is
+// `email_conflict` (from `authMiddleware.EmailLinkedElsewhereError`), but the
+// shape leaves room for future ones.
+export interface AuthError {
+  code: string;
+  message: string;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  register: (
-    email: string,
-    password: string,
-    displayName: string,
-    igUsername: string
-  ) => Promise<{ verifyCode: string }>;
-  logout: () => void;
+  authError: AuthError | null;
   refreshUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>(null!);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  loading: true,
+  authError: null,
+  refreshUser: async () => {},
+});
 
+// Bridges Clerk's session into the legacy AuthContext shape the rest of the
+// app already consumes. Clerk owns sign-in / sign-up / sign-out — those
+// actions are now performed via Clerk's components and hooks directly,
+// not through this context.
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { isLoaded, isSignedIn, getToken } = useClerkAuth();
+  const { user: clerkUser } = useUser();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<AuthError | null>(null);
 
-  const refreshUser = async () => {
-    try {
-      const data = await api.get<{ user: User }>("/auth/me");
-      setUser(data.user);
-    } catch {
-      localStorage.removeItem("token");
-      setUser(null);
-    }
-  };
-
+  // Clean up the legacy JWT key from before the Clerk switch. Harmless if
+  // absent; just stops a stale value from sitting in storage forever.
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      refreshUser().finally(() => setLoading(false));
-    } else {
-      setLoading(false);
+    try {
+      localStorage.removeItem("token");
+    } catch {
+      // localStorage may be unavailable in private-browsing contexts.
     }
   }, []);
 
-  const login = async (username: string, password: string) => {
-    const data = await api.post<{ token: string; user: User }>("/auth/login", {
-      username,
-      password,
-    });
-    localStorage.setItem("token", data.token);
-    setUser(data.user);
-  };
+  // Make the api/client able to attach a fresh Clerk session token to every
+  // outgoing request without a circular import.
+  useEffect(() => {
+    setTokenGetter(() => getToken());
+  }, [getToken]);
 
-  const register = async (
-    email: string,
-    password: string,
-    displayName: string,
-    igUsername: string
-  ): Promise<{ verifyCode: string }> => {
-    const data = await api.post<{
-      token: string;
-      verifyCode: string;
-      user: User;
-    }>("/auth/register", { email, password, displayName, igUsername });
-    localStorage.setItem("token", data.token);
-    setUser(data.user);
-    return { verifyCode: data.verifyCode };
-  };
+  const refreshUser = useCallback(async () => {
+    try {
+      const data = await api.get<{ user: User }>("/auth/me");
+      setUser(data.user);
+      setAuthError(null);
+    } catch (err) {
+      // Distinguish permanent identity collisions from transient failures. A
+      // 409 with `code: "email_conflict"` means this Clerk user's email is
+      // already linked to a different local row — every subsequent /auth/me
+      // call returns the same 409, so signing in again won't help. Surface a
+      // dedicated error state so the consumer can render an actionable
+      // screen (with sign-out) instead of dropping the user into the
+      // signed-in-but-no-local-user UX, which is itself a dead end.
+      if (err instanceof ApiError && err.code === "email_conflict") {
+        setAuthError({ code: err.code, message: err.message });
+      } else {
+        setAuthError(null);
+      }
+      setUser(null);
+    }
+  }, []);
 
-  const logout = () => {
-    localStorage.removeItem("token");
-    setUser(null);
-  };
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      setUser(null);
+      setAuthError(null);
+      setLoading(false);
+      return;
+    }
+    refreshUser().finally(() => setLoading(false));
+    // re-key on Clerk user id so a sign-out/sign-in re-fetches the local row
+  }, [isLoaded, isSignedIn, clerkUser?.id, refreshUser]);
 
   return (
-    <AuthContext.Provider
-      value={{ user, loading, login, register, logout, refreshUser }}
-    >
+    <AuthContext.Provider value={{ user, loading, authError, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

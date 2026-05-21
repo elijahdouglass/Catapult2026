@@ -8,30 +8,35 @@ datasource db {
 }
 
 model User {
-  id             Int      @id @default(autoincrement())
-  email          String   @unique
-  passwordHash   String?
-  displayName    String
-  igUserId       String?  @unique
-  igUsername      String?
-  igVerified     Boolean  @default(false)
-  igVerifyCode   String?
-  tags           String?  @db.Text
-  tagVector      Bytes?   @db.MediumBlob
-  screenshotPath String?
-  onboarded      Boolean  @default(false)
-  likeThreshold    Int      @default(3)
-  worldIdVerified  Boolean  @default(false)
-  worldIdNullifier String?  @unique
-  createdAt        DateTime @default(now())
+  id                 Int      @id @default(autoincrement())
+  clerkId            String?  @unique
+  email              String   @unique
+  passwordHash       String?
+  displayName        String
+  // The displayName value we last derived from Clerk. Used by the Clerk
+  // webhook to detect whether `displayName` has been overridden via
+  // PATCH /auth/profile and therefore should not be auto-refreshed.
+  derivedDisplayName String?
+  igUserId           String?  @unique
+  igUsername         String?  @unique
+  igVerified         Boolean  @default(false)
+  igVerifyCode       String?
+  tags               String?  @db.Text
+  tagVector          Bytes?   @db.MediumBlob
+  screenshotPath     String?
+  onboarded          Boolean  @default(false)
+  likeThreshold      Int      @default(3)
+  worldIdVerified    Boolean  @default(false)
+  worldIdNullifier   String?  @unique
+  createdAt          DateTime @default(now())
 
-  likesGiven    Like[] @relation("LikerRelation")
-  likesReceived Like[] @relation("LikeeRelation")
-  reelViews     ReelView[]
-  reelLikesGiven ReelLike[] @relation("ReelLikerRelation")
+  likesGiven        Like[]     @relation("LikerRelation")
+  likesReceived     Like[]     @relation("LikeeRelation")
+  reelViews         ReelView[]
+  reelLikesGiven    ReelLike[] @relation("ReelLikerRelation")
   reelLikesReceived ReelLike[] @relation("ReelOwnerRelation")
-  seenGiven     SeenUser[] @relation("SeenViewer")
-  seenReceived  SeenUser[] @relation("SeenTarget")
+  seenGiven         SeenUser[] @relation("SeenViewer")
+  seenReceived      SeenUser[] @relation("SeenTarget")
 }
 
 model SeenUser {

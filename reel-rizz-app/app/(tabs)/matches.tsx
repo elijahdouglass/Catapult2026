@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp, FadeIn } from 'react-native-reanimated';
+import { useClerk } from '@clerk/clerk-expo';
 import { api } from '@/api/client';
 import { useAuth } from '@/context/auth';
 import { Colors } from '@/constants/theme';
@@ -28,7 +29,9 @@ interface Match {
 }
 
 export default function MatchesScreen() {
-  const { user, logout, refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const { signOut } = useClerk();
+  const logout = () => signOut();
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const { open: openWorldId } = useWorldIdVerify({ onVerified: refreshUser });

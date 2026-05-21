@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
+import { useClerk } from "@clerk/clerk-react";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { CSSProperties, useState, useEffect, useRef } from "react";
@@ -164,7 +165,8 @@ sheet.textContent = `
 document.head.appendChild(sheet);
 
 export default function Navbar() {
-  const { user, logout, refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const { signOut } = useClerk();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [mobile, setMobile] = useState(window.innerWidth < MOBILE_BP);
@@ -190,8 +192,8 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", onClick);
   }, [menuOpen]);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await signOut();
     navigate("/");
   };
 
