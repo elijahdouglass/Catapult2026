@@ -69,12 +69,23 @@ async function resolveLocalUser(clerkUserId: string): Promise<number> {
       );
       throw new Error("Email already linked to a different Clerk user");
     }
-    const adopted = await prisma.user.update({
-      where: { id: byEmail.id },
+    // Atomic adoption: include the `clerkId IS NULL` precondition in the
+    // write itself so two concurrent adoptions of the same email can't both
+    // succeed and silently overwrite each other.
+    const adopted = await prisma.user.updateMany({
+      where: { id: byEmail.id, clerkId: null },
       data: { clerkId: clerkUserId },
-      select: { id: true },
     });
-    return adopted.id;
+    if (adopted.count === 1) return byEmail.id;
+    const after = await prisma.user.findUnique({
+      where: { id: byEmail.id },
+      select: { id: true, clerkId: true },
+    });
+    if (after?.clerkId === clerkUserId) return after.id;
+    console.error(
+      `resolveLocalUser: email ${email} adoption lost race to ${after?.clerkId ?? "unknown"}; refusing to re-link to ${clerkUserId}`
+    );
+    throw new Error("Email already linked to a different Clerk user");
   }
 
   try {
@@ -99,19 +110,24 @@ async function resolveLocalUser(clerkUserId: string): Promise<number> {
       if (after) return after.id;
     }
     // Race on email: re-check ownership and only adopt if still unlinked.
+    // Use updateMany so the unlinked precondition is enforced atomically.
     if (isUniqueViolationOn(err, ["email"])) {
       const raced = await prisma.user.findUnique({
         where: { email },
         select: { id: true, clerkId: true },
       });
       if (raced && raced.clerkId === clerkUserId) return raced.id;
-      if (raced && raced.clerkId === null) {
-        const adopted = await prisma.user.update({
-          where: { id: raced.id },
+      if (raced) {
+        const adopted = await prisma.user.updateMany({
+          where: { id: raced.id, clerkId: null },
           data: { clerkId: clerkUserId },
-          select: { id: true },
         });
-        return adopted.id;
+        if (adopted.count === 1) return raced.id;
+        const after = await prisma.user.findUnique({
+          where: { id: raced.id },
+          select: { id: true, clerkId: true },
+        });
+        if (after?.clerkId === clerkUserId) return after.id;
       }
       console.error(
         `resolveLocalUser: email ${email} raced into a row linked to ${raced?.clerkId ?? "unknown"}; refusing to re-link to ${clerkUserId}`

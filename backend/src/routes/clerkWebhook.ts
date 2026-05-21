@@ -84,25 +84,38 @@ router.post("/", async (req: Request, res: Response) => {
         // row by stamping clerkId — but only when it isn't already linked to
         // a different Clerk user. Otherwise we'd transfer the existing row's
         // igUsername / igVerified / likes / reels to a new identity. We
-        // deliberately don't touch displayName during adoption so a manually
-        // curated value (e.g. seeded "J. Fitness") survives until a later
-        // user.updated event syncs from Clerk.
+        // don't touch displayName during adoption; a later user.updated
+        // event will resync displayName from Clerk unless the user has
+        // since overridden it via PATCH /auth/profile (tracked by
+        // derivedDisplayName).
         const byEmail = await prisma.user.findUnique({
           where: { email },
           select: { id: true, clerkId: true },
         });
         if (byEmail) {
-          if (byEmail.clerkId !== null && byEmail.clerkId !== data.id) {
+          if (byEmail.clerkId === data.id) break;
+          if (byEmail.clerkId !== null) {
             console.warn(
               `Clerk webhook ${evt.type}: refusing to adopt local row for ${email} — already linked to ${byEmail.clerkId}, incoming ${data.id}`
             );
             break;
           }
-          if (byEmail.clerkId === null) {
-            await prisma.user.update({
+          // Atomic adoption: include the `clerkId IS NULL` precondition in
+          // the write so two concurrent adoptions can't both stamp the row.
+          const adopted = await prisma.user.updateMany({
+            where: { id: byEmail.id, clerkId: null },
+            data: { clerkId: data.id },
+          });
+          if (adopted.count === 0) {
+            const after = await prisma.user.findUnique({
               where: { id: byEmail.id },
-              data: { clerkId: data.id },
+              select: { clerkId: true },
             });
+            if (after?.clerkId !== data.id) {
+              console.warn(
+                `Clerk webhook ${evt.type}: lost adoption race for ${email} — now linked to ${after?.clerkId ?? "unknown"}, incoming ${data.id}`
+              );
+            }
           }
           break;
         }
@@ -125,19 +138,31 @@ router.post("/", async (req: Request, res: Response) => {
               data: { email },
             });
           } else if (isUniqueViolationOn(err, ["email"])) {
-            // Race on email: re-check ownership before adopting.
+            // Race on email: re-check ownership before adopting. Use
+            // updateMany so the unlinked precondition is enforced atomically.
             const raced = await prisma.user.findUnique({
               where: { email },
               select: { id: true, clerkId: true },
             });
-            if (raced && raced.clerkId === null) {
-              await prisma.user.update({
-                where: { id: raced.id },
+            if (raced && raced.clerkId !== data.id) {
+              const adopted = await prisma.user.updateMany({
+                where: { id: raced.id, clerkId: null },
                 data: { clerkId: data.id },
               });
-            } else if (!raced || raced.clerkId !== data.id) {
+              if (adopted.count === 0) {
+                const after = await prisma.user.findUnique({
+                  where: { id: raced.id },
+                  select: { clerkId: true },
+                });
+                if (after?.clerkId !== data.id) {
+                  console.warn(
+                    `Clerk webhook ${evt.type}: refusing to adopt local row for ${email} after race — owner ${after?.clerkId ?? "unknown"}, incoming ${data.id}`
+                  );
+                }
+              }
+            } else if (!raced) {
               console.warn(
-                `Clerk webhook ${evt.type}: refusing to adopt local row for ${email} after race — owner ${raced?.clerkId ?? "unknown"}, incoming ${data.id}`
+                `Clerk webhook ${evt.type}: row for ${email} vanished after P2002, incoming ${data.id}`
               );
             }
           } else {
