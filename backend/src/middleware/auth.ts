@@ -108,9 +108,20 @@ async function resolveLocalUser(clerkUserId: string): Promise<number> {
       select: { id: true, clerkId: true },
     });
     if (after?.clerkId === clerkUserId) return after.id;
-    console.error(
-      `resolveLocalUser: email ${email} adoption lost race to ${after?.clerkId ?? "unknown"}; refusing to re-link to ${clerkUserId}`
-    );
+    // Two distinct failure modes share this branch: either the row was deleted
+    // between our updateMany and the re-read (rare; `after` is null), or a
+    // concurrent adoption beat us to it (`after.clerkId` is non-null and
+    // different from ours). Distinguish them in the log so on-call can tell
+    // "row vanished mid-adoption" apart from "lost to <other clerkId>".
+    if (!after) {
+      console.error(
+        `resolveLocalUser: row for ${email} vanished mid-adoption; refusing to re-link to ${clerkUserId}`
+      );
+    } else {
+      console.error(
+        `resolveLocalUser: email ${email} adoption lost race to ${after.clerkId}; refusing to re-link to ${clerkUserId}`
+      );
+    }
     throw new EmailLinkedElsewhereError(
       email,
       clerkUserId,
@@ -147,7 +158,10 @@ async function resolveLocalUser(clerkUserId: string): Promise<number> {
         select: { id: true, clerkId: true },
       });
       if (raced && raced.clerkId === clerkUserId) return raced.id;
-      if (raced) {
+      // Symmetric with the byEmail branch above: short-circuit when the row
+      // is already linked to a different Clerk user so we don't issue a
+      // no-op updateMany + extra findUnique before rejecting.
+      if (raced && raced.clerkId === null) {
         const adopted = await prisma.user.updateMany({
           where: { id: raced.id, clerkId: null },
           data: { clerkId: clerkUserId },
@@ -158,6 +172,20 @@ async function resolveLocalUser(clerkUserId: string): Promise<number> {
           select: { id: true, clerkId: true },
         });
         if (after?.clerkId === clerkUserId) return after.id;
+        if (!after) {
+          console.error(
+            `resolveLocalUser: row for ${email} vanished after P2002; refusing to re-link to ${clerkUserId}`
+          );
+        } else {
+          console.error(
+            `resolveLocalUser: email ${email} raced into a row linked to ${after.clerkId}; refusing to re-link to ${clerkUserId}`
+          );
+        }
+        throw new EmailLinkedElsewhereError(
+          email,
+          clerkUserId,
+          after?.clerkId ?? "unknown"
+        );
       }
       console.error(
         `resolveLocalUser: email ${email} raced into a row linked to ${raced?.clerkId ?? "unknown"}; refusing to re-link to ${clerkUserId}`

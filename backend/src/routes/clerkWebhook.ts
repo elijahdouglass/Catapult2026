@@ -152,9 +152,19 @@ router.post("/", async (req: Request, res: Response) => {
               where: { id: byEmail.id },
               select: { clerkId: true },
             });
-            if (after?.clerkId !== data.id) {
+            // Three outcomes here, only one of which is a real conflict:
+            //   - after.clerkId === data.id: idempotent same-user race, no-op.
+            //   - after is null: row deleted between updateMany and re-read.
+            //   - after.clerkId !== data.id: lost to a different Clerk user.
+            // Tag the warning so a future metric can split "row vanished" and
+            // "genuine conflict" without re-parsing the message body.
+            if (!after) {
               console.warn(
-                `Clerk webhook ${evt.type}: lost adoption race for ${email} — now linked to ${after?.clerkId ?? "unknown"}, incoming ${data.id}`
+                `Clerk webhook ${evt.type}: row for ${email} vanished mid-adoption, incoming ${data.id}`
+              );
+            } else if (after.clerkId !== data.id) {
+              console.warn(
+                `Clerk webhook ${evt.type}: lost adoption race for ${email} to ${after.clerkId}, incoming ${data.id}`
               );
             }
           }
