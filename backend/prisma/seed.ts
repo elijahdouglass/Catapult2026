@@ -97,7 +97,7 @@ async function main() {
 
   // Create users. Auth is owned by Clerk; seeded rows exist purely as demo
   // data for discovery/matching. They are stamped with a sentinel clerkId
-  // ("seed:<idx>") so the adopt-by-email path in `resolveLocalUser` and the
+  // ("seed:<email>") so the adopt-by-email path in `resolveLocalUser` and the
   // Clerk webhook — which both only adopt rows where `clerkId IS NULL` —
   // can never hand a seeded row to a real Clerk signup. Without this guard,
   // because seed emails are public in the repo, anyone could sign up at
@@ -105,6 +105,10 @@ async function main() {
   // igVerified, worldIdVerified, matches, and reels on first authenticated
   // request. derivedDisplayName is set so the post-adoption refresh path
   // sees `displayName === derivedDisplayName` and behaves consistently.
+  // The sentinel is keyed off the email (not the loop index) so reordering
+  // or deleting entries from `users[]` between seed runs can't shift a
+  // previously-seeded row's sentinel onto a new email and trip the
+  // `clerkId` unique constraint.
   const createdUsers: { id: number; idx: number }[] = [];
 
   for (let i = 0; i < users.length; i++) {
@@ -126,7 +130,7 @@ async function main() {
       if (existing.clerkId === null) {
         await prisma.user.update({
           where: { id: existing.id },
-          data: { clerkId: `seed:${i}` },
+          data: { clerkId: `seed:${u.email}` },
         });
         console.log(`  Backfilled sentinel clerkId on ${u.email} (id=${existing.id})`);
       } else {
@@ -138,7 +142,7 @@ async function main() {
 
     const created = await prisma.user.create({
       data: {
-        clerkId: `seed:${i}`,
+        clerkId: `seed:${u.email}`,
         email: u.email,
         displayName: u.displayName,
         derivedDisplayName: u.displayName,

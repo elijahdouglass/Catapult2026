@@ -89,10 +89,30 @@ router.post("/", async (req: Request, res: Response) => {
               console.warn(
                 `Clerk webhook ${evt.type}: email ${email} already held by another local row; updating ${data.id} without email field`
               );
-              await prisma.user.update({
-                where: { clerkId: data.id },
-                data: withoutEmail,
-              });
+              try {
+                await prisma.user.update({
+                  where: { clerkId: data.id },
+                  data: withoutEmail,
+                });
+              } catch (retryErr) {
+                // P2025: the row was deleted concurrently between our
+                // initial `findUnique`/`update` and this retry (e.g. a
+                // user.deleted webhook arrived in the gap). Ack with a
+                // warning — a future user.updated will either land on a
+                // newly-created row or repeat this resolution. Surfacing
+                // 500 here just makes Clerk retry with a misleading "handler
+                // failed" log.
+                if (
+                  retryErr instanceof Prisma.PrismaClientKnownRequestError &&
+                  retryErr.code === "P2025"
+                ) {
+                  console.warn(
+                    `Clerk webhook ${evt.type}: row for ${data.id} vanished before retry; acking`
+                  );
+                } else {
+                  throw retryErr;
+                }
+              }
             } else {
               throw err;
             }

@@ -35,6 +35,19 @@ function isUniqueViolationOn(err: unknown, fields: string[]): boolean {
 // (and `verifyClerkSessionToken`) can return a stable 409 + machine-readable
 // code instead of an opaque 500, which the user can hit permanently after a
 // successful Clerk signup.
+//
+// `existingClerkId` is informational — it is logged for operator triage and
+// returned only in server logs (never the HTTP body). It can hold three
+// distinct value shapes, all stored as plain strings:
+//   1. A real Clerk user ID (`user_…`) when the colliding row is owned by
+//      a different Clerk identity (the common case once Clerk is live).
+//   2. A seed sentinel (`seed:<email>`) when the colliding row is one of
+//      the demo rows stamped by `prisma/seed.ts`.
+//   3. The literal string `"unknown"` on the race paths, where the row was
+//      either deleted or re-linked between the failing write and the
+//      follow-up `findUnique` we use to identify the new owner.
+// Operator tooling that parses this field for triage needs to know about
+// all three shapes; consider a discriminator if more shapes ever appear.
 export class EmailLinkedElsewhereError extends Error {
   readonly code = "email_conflict";
   constructor(public email: string, public clerkUserId: string, public existingClerkId: string) {

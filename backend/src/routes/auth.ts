@@ -5,10 +5,11 @@ import { authMiddleware, AuthRequest } from "../middleware/auth";
 
 // Canonical form for IG handles: strip leading "@"s, trim, lowercase. Applied
 // at the only write-time entry point (PATCH /auth/profile) and mirrored in
-// seed.ts so the DB only ever stores normalized values. The regex strips one
-// or more leading "@" characters so the runtime canonical form matches the
-// MySQL `TRIM(LEADING '@' FROM ...)` used by the unique-index migration —
-// MySQL's `TRIM LEADING` strips *all* matching characters, not just one.
+// seed.ts so the DB only ever stores normalized values. The `/^@+/` regex
+// strips a run of consecutive leading "@" characters, which matches MySQL's
+// `TRIM(LEADING '@' FROM ...)` used by the unique-index migration — both
+// stop at the first non-`@` character, so e.g. `"@ @alice"` normalizes to
+// `"@alice"` on both sides.
 function normalizeIgUsername(raw: string): string {
   return raw.trim().replace(/^@+/, "").trim().toLowerCase();
 }

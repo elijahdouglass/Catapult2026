@@ -7,7 +7,7 @@ import {
   ReactNode,
 } from "react";
 import { useAuth as useClerkAuth, useUser } from "@clerk/clerk-react";
-import { api, setTokenGetter } from "../api/client";
+import { api, ApiError, setTokenGetter } from "../api/client";
 
 interface User {
   id: number;
@@ -21,15 +21,26 @@ interface User {
   worldIdVerified: boolean;
 }
 
+// Permanent (operator-action-required) failures surfaced by /auth/me, parsed
+// from the backend's structured 409 body. Today the only such code is
+// `email_conflict` (from `authMiddleware.EmailLinkedElsewhereError`), but the
+// shape leaves room for future ones.
+export interface AuthError {
+  code: string;
+  message: string;
+}
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  authError: AuthError | null;
   refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  authError: null,
   refreshUser: async () => {},
 });
 
@@ -42,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { user: clerkUser } = useUser();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<AuthError | null>(null);
 
   // Clean up the legacy JWT key from before the Clerk switch. Harmless if
   // absent; just stops a stale value from sitting in storage forever.
@@ -63,7 +75,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const data = await api.get<{ user: User }>("/auth/me");
       setUser(data.user);
-    } catch {
+      setAuthError(null);
+    } catch (err) {
+      // Distinguish permanent identity collisions from transient failures. A
+      // 409 with `code: "email_conflict"` means this Clerk user's email is
+      // already linked to a different local row — every subsequent /auth/me
+      // call returns the same 409, so signing in again won't help. Surface a
+      // dedicated error state so the consumer can render an actionable
+      // screen (with sign-out) instead of dropping the user into the
+      // signed-in-but-no-local-user UX, which is itself a dead end.
+      if (err instanceof ApiError && err.code === "email_conflict") {
+        setAuthError({ code: err.code, message: err.message });
+      } else {
+        setAuthError(null);
+      }
       setUser(null);
     }
   }, []);
@@ -72,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isLoaded) return;
     if (!isSignedIn) {
       setUser(null);
+      setAuthError(null);
       setLoading(false);
       return;
     }
@@ -80,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [isLoaded, isSignedIn, clerkUser?.id, refreshUser]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, authError, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
