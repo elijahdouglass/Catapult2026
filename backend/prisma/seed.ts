@@ -1,9 +1,6 @@
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
-
-const PASSWORD = "password123";
 
 // Real reel IDs captured from the database
 const REEL_IDS = [
@@ -98,8 +95,8 @@ async function main() {
     });
   }
 
-  // Create users
-  const passwordHash = await bcrypt.hash(PASSWORD, 10);
+  // Create users. Auth is owned by Clerk; seeded rows are local-only and have
+  // no clerkId — they exist for discovery/matching demo data.
   const createdUsers: { id: number; idx: number }[] = [];
 
   for (let i = 0; i < users.length; i++) {
@@ -118,7 +115,6 @@ async function main() {
     const created = await prisma.user.create({
       data: {
         email: u.email,
-        passwordHash,
         displayName: u.displayName,
         igUsername: u.igUsername,
         tags: u.tags,
@@ -203,7 +199,6 @@ async function main() {
   console.log(`  ${createdUsers.length * 5} reel views`);
   console.log(`  ${REEL_LIKE_PATTERNS.length} reel likes`);
   console.log(`  ${MUTUAL_PAIRS.length} mutual matches, ${ONE_WAY_LIKES.length} one-way likes`);
-  console.log(`  All users password: ${PASSWORD}`);
 }
 
 main()

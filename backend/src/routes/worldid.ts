@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { signRequest } from "@worldcoin/idkit-server";
-import { authMiddleware, AuthRequest } from "../middleware/auth";
+import { authMiddleware, AuthRequest, verifyClerkSessionToken } from "../middleware/auth";
 import prisma from "../lib/prisma";
 
 const router = Router();
@@ -19,15 +19,13 @@ router.get("/verify-page", async (req: AuthRequest, res: Response) => {
     res.status(401).send("Missing token");
     return;
   }
-  // Manually verify JWT so we don't need the header-based middleware
-  const jwt = await import("jsonwebtoken");
-  try {
-    const payload = jwt.default.verify(token, process.env.JWT_SECRET!) as { userId: number };
-    req.userId = payload.userId;
-  } catch {
+  // Verify Clerk session token so we don't need the header-based middleware
+  const userId = await verifyClerkSessionToken(token);
+  if (!userId) {
     res.status(401).send("Invalid token");
     return;
   }
+  req.userId = userId;
   if (!WORLD_ID_APP_ID || !WORLD_ID_RP_ID || !WORLD_ID_RP_SIGNING_KEY) {
     res.status(503).send("World ID not configured");
     return;
