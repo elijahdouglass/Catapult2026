@@ -1,10 +1,20 @@
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3001/api";
 
+// AuthContext installs a getter that returns a fresh Clerk session token.
+// Lives at module scope (not in React state) so non-component callers
+// (background polling, etc.) can still reach it.
+type TokenGetter = () => Promise<string | null>;
+let tokenGetter: TokenGetter | null = null;
+
+export function setTokenGetter(fn: TokenGetter | null) {
+  tokenGetter = fn;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = localStorage.getItem("token");
+  const token = tokenGetter ? await tokenGetter() : null;
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
   };
@@ -36,6 +46,11 @@ export const api = {
   post: <T>(path: string, body?: any) =>
     request<T>(path, {
       method: "POST",
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    }),
+  patch: <T>(path: string, body?: any) =>
+    request<T>(path, {
+      method: "PATCH",
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
 };

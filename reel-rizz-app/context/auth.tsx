@@ -1,5 +1,13 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { api, getToken, setToken, removeToken } from '@/api/client';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from 'react';
+import { useAuth as useClerkAuth, useUser } from '@clerk/clerk-expo';
+import { api, setTokenGetter } from '@/api/client';
 
 export interface User {
   id: number;
@@ -8,6 +16,7 @@ export interface User {
   onboarded: boolean;
   igUsername?: string;
   igVerified?: boolean;
+  igVerifyCode?: string;
   worldIdVerified: boolean;
   tags?: string;
 }
@@ -15,69 +24,48 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  pendingVerifyCode: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, displayName: string, igUsername: string) => Promise<{ verifyCode: string }>;
-  logout: () => void;
   refreshUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>(null!);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  loading: true,
+  refreshUser: async () => {},
+});
 
+// Clerk owns sign-in / sign-up / sign-out. This context just mirrors the
+// local /me row for screens that still consume the old shape.
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { isLoaded, isSignedIn, getToken } = useClerkAuth();
+  const { user: clerkUser } = useUser();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pendingVerifyCode, setPendingVerifyCode] = useState<string | null>(null);
 
-  const refreshUser = async () => {
+  useEffect(() => {
+    setTokenGetter(() => getToken());
+  }, [getToken]);
+
+  const refreshUser = useCallback(async () => {
     try {
       const data = await api.get<{ user: User }>('/auth/me');
       setUser(data.user);
     } catch {
-      await removeToken();
       setUser(null);
     }
-  };
-
-  useEffect(() => {
-    (async () => {
-      const token = await getToken();
-      if (token) {
-        await refreshUser();
-      }
-      setLoading(false);
-    })();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const data = await api.post<{ token: string; user: User }>('/auth/login', {
-      username: email,
-      password,
-    });
-    await setToken(data.token);
-    setUser(data.user);
-  };
-
-  const register = async (email: string, password: string, displayName: string, igUsername: string) => {
-    const data = await api.post<{ token: string; user: User; verifyCode: string }>('/auth/register', {
-      email,
-      password,
-      displayName,
-      igUsername,
-    });
-    await setToken(data.token);
-    setUser(data.user);
-    setPendingVerifyCode(data.verifyCode);
-    return { verifyCode: data.verifyCode };
-  };
-
-  const logout = async () => {
-    await removeToken();
-    setUser(null);
-  };
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+    refreshUser().finally(() => setLoading(false));
+  }, [isLoaded, isSignedIn, clerkUser?.id, refreshUser]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, pendingVerifyCode, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

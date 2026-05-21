@@ -1,10 +1,21 @@
 import { Request, Response, NextFunction } from "express";
+import { randomBytes } from "crypto";
 import { clerkClient, getAuth } from "@clerk/express";
 import prisma from "../lib/prisma";
 
 export interface AuthRequest extends Request {
   userId?: number;
   clerkUserId?: string;
+}
+
+// Short, copy/paste-friendly IG DM verification code. Excludes ambiguous
+// glyphs so a user reading it off-screen doesn't confuse O/0 or I/1.
+function generateIgVerifyCode(): string {
+  const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = randomBytes(8);
+  let out = "";
+  for (let i = 0; i < 8; i++) out += ALPHABET[bytes[i] % ALPHABET.length];
+  return out;
 }
 
 // Resolve a Clerk-authenticated request to a local User row, creating one on
@@ -33,7 +44,12 @@ async function resolveLocalUser(clerkUserId: string): Promise<number> {
   // unique-constraint violation and re-fetch.
   try {
     const created = await prisma.user.create({
-      data: { clerkId: clerkUserId, email, displayName },
+      data: {
+        clerkId: clerkUserId,
+        email,
+        displayName,
+        igVerifyCode: generateIgVerifyCode(),
+      },
       select: { id: true },
     });
     return created.id;

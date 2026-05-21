@@ -29,6 +29,19 @@ export default defineManifest({
       js: ['src/contentScript/index.ts'],
     },
   ],
-  permissions: ['storage'],
-  host_permissions: ['http://localhost:3001/*'],
+  permissions: ['storage', 'cookies'],
+  host_permissions: [
+    'http://localhost:3001/*',
+    // Clerk needs access to the frontend API host configured in your
+    // Clerk dashboard. Add the production one when deploying.
+    'https://*.clerk.accounts.dev/*',
+    'https://clerk.*/*',
+    // For sync-host (sharing the web app's session) — adjust to your web
+    // app origin in production.
+    'http://localhost:5173/*',
+  ],
+  // The `key` field below pins the extension ID. Clerk requires a stable
+  // extension ID; generate one in the Clerk dashboard and inject via
+  // CRX_KEY at build time, e.g. `VITE_CRX_KEY=... npm run build`.
+  key: process.env.CRX_KEY || undefined,
 })

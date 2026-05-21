@@ -1,19 +1,19 @@
-import * as SecureStore from 'expo-secure-store';
-
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? 'http://localhost:3001/api';
 
-const TOKEN_KEY = 'auth_token';
+// AuthProvider installs a getter that returns a fresh Clerk session token.
+// Module-scope so non-component callers (background tasks) can use it too.
+type TokenGetter = () => Promise<string | null>;
+let tokenGetter: TokenGetter | null = null;
 
+export function setTokenGetter(fn: TokenGetter | null) {
+  tokenGetter = fn;
+}
+
+// Backwards-compatible helper used by world-id-verify to embed the token in a
+// URL for the SFSafariViewController bridge. With Clerk this returns the
+// short-lived session JWT; the backend's verifyClerkSessionToken accepts it.
 export async function getToken(): Promise<string | null> {
-  return SecureStore.getItemAsync(TOKEN_KEY);
-}
-
-export async function setToken(token: string): Promise<void> {
-  await SecureStore.setItemAsync(TOKEN_KEY, token);
-}
-
-export async function removeToken(): Promise<void> {
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  return tokenGetter ? tokenGetter() : null;
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -48,6 +48,11 @@ export const api = {
   post: <T>(path: string, body?: any) =>
     request<T>(path, {
       method: 'POST',
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    }),
+  patch: <T>(path: string, body?: any) =>
+    request<T>(path, {
+      method: 'PATCH',
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
 };

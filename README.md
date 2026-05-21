@@ -70,7 +70,13 @@ CLERK_WEBHOOK_SIGNING_SECRET=whsec_...
 
 In the Clerk dashboard, add a webhook pointing at `http://<your-tunnel>/api/clerk/webhook` (use ngrok or similar for local dev) and subscribe to `user.created`, `user.updated`, and `user.deleted` events. Copy the signing secret into `CLERK_WEBHOOK_SIGNING_SECRET`. The backend syncs Clerk identity into the local `User` table on first authenticated request and via this webhook.
 
-Frontends still need their own Clerk wiring (`@clerk/clerk-react`, `@clerk/clerk-expo`) — see follow-up issues.
+Each frontend needs the **publishable** key too. Copy the matching `.env.example` to `.env` in each package and fill in:
+
+- `frontend/.env` — `VITE_CLERK_PUBLISHABLE_KEY`
+- `reel-rizz-app/.env` — `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `reel-rizz-reader/.env` — `VITE_CLERK_PUBLISHABLE_KEY` (and optionally `VITE_CLERK_SYNC_HOST` to share a session with the web app)
+
+The Chrome extension also needs a **stable extension ID** — add a Chrome Extension app in the Clerk dashboard, copy the manifest `key` it gives you, and export it as `CRX_KEY` before `npm run build` so the manifest pins the ID Clerk has whitelisted.
 
 ### 2. Python OCR env
 
