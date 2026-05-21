@@ -56,46 +56,90 @@ router.post("/", async (req: Request, res: Response) => {
           data.username ||
           email.split("@")[0];
 
-        // Existing row by clerkId: refresh email, and refresh displayName
-        // only if it still matches what we'd derive from Clerk (i.e. the
-        // user hasn't overridden it via PATCH /auth/profile).
+        // Existing row by clerkId: always refresh email; refresh displayName
+        // only when the local value still equals the value we last derived
+        // from Clerk (tracked in `derivedDisplayName`). That way a user who
+        // overrides their name via PATCH /auth/profile doesn't see it
+        // silently clobbered on the next Clerk-side edit, but a row whose
+        // displayName has never been overridden does keep tracking Clerk.
         const byClerkId = await prisma.user.findUnique({
           where: { clerkId: data.id },
-          select: { id: true, displayName: true },
+          select: { id: true, displayName: true, derivedDisplayName: true },
         });
         if (byClerkId) {
-          const shouldRefreshName = byClerkId.displayName !== displayName;
+          const userOverrode =
+            byClerkId.derivedDisplayName !== null &&
+            byClerkId.displayName !== byClerkId.derivedDisplayName;
           await prisma.user.update({
             where: { clerkId: data.id },
-            data: shouldRefreshName ? { email, displayName } : { email },
+            data: userOverrode
+              ? { email, derivedDisplayName: displayName }
+              : { email, displayName, derivedDisplayName: displayName },
           });
           break;
         }
 
-        // No row yet for this clerkId. Try to create; if the email is
-        // already taken (seed data, or a user that existed before Clerk
-        // was wired in), adopt that row by stamping clerkId on it.
+        // No row yet for this clerkId. If the email is already on file (seed
+        // data or a user that existed before Clerk was wired in), adopt that
+        // row by stamping clerkId — but only when it isn't already linked to
+        // a different Clerk user. Otherwise we'd transfer the existing row's
+        // igUsername / igVerified / likes / reels to a new identity. We
+        // deliberately don't touch displayName during adoption so a manually
+        // curated value (e.g. seeded "J. Fitness") survives until a later
+        // user.updated event syncs from Clerk.
+        const byEmail = await prisma.user.findUnique({
+          where: { email },
+          select: { id: true, clerkId: true },
+        });
+        if (byEmail) {
+          if (byEmail.clerkId !== null && byEmail.clerkId !== data.id) {
+            console.warn(
+              `Clerk webhook ${evt.type}: refusing to adopt local row for ${email} — already linked to ${byEmail.clerkId}, incoming ${data.id}`
+            );
+            break;
+          }
+          if (byEmail.clerkId === null) {
+            await prisma.user.update({
+              where: { id: byEmail.id },
+              data: { clerkId: data.id },
+            });
+          }
+          break;
+        }
+
         try {
           await prisma.user.create({
             data: {
               clerkId: data.id,
               email,
               displayName,
+              derivedDisplayName: displayName,
               igVerifyCode: generateIgVerifyCode(),
             },
           });
         } catch (err) {
-          if (isUniqueViolationOn(err, ["email"])) {
-            await prisma.user.update({
-              where: { email },
-              data: { clerkId: data.id },
-            });
-          } else if (isUniqueViolationOn(err, ["clerkId"])) {
+          if (isUniqueViolationOn(err, ["clerkId"])) {
             // Concurrent create on the same clerkId — already linked.
             await prisma.user.update({
               where: { clerkId: data.id },
               data: { email },
             });
+          } else if (isUniqueViolationOn(err, ["email"])) {
+            // Race on email: re-check ownership before adopting.
+            const raced = await prisma.user.findUnique({
+              where: { email },
+              select: { id: true, clerkId: true },
+            });
+            if (raced && raced.clerkId === null) {
+              await prisma.user.update({
+                where: { id: raced.id },
+                data: { clerkId: data.id },
+              });
+            } else if (!raced || raced.clerkId !== data.id) {
+              console.warn(
+                `Clerk webhook ${evt.type}: refusing to adopt local row for ${email} after race — owner ${raced?.clerkId ?? "unknown"}, incoming ${data.id}`
+              );
+            }
           } else {
             throw err;
           }

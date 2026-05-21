@@ -52,12 +52,38 @@ async function resolveLocalUser(clerkUserId: string): Promise<number> {
     clerkUser.username ||
     email.split("@")[0];
 
+  // Pre-existing local row for this email (seed data, or a user that existed
+  // before Clerk was wired in) — adopt it by stamping clerkId, but only if
+  // it isn't already linked to a different Clerk user. Without this guard we
+  // could hand User A's likes/reels/igUsername to User B in environments
+  // where Clerk allows duplicate emails or after an email-change race.
+  const byEmail = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, clerkId: true },
+  });
+  if (byEmail) {
+    if (byEmail.clerkId === clerkUserId) return byEmail.id;
+    if (byEmail.clerkId !== null) {
+      console.error(
+        `resolveLocalUser: local row for ${email} is already linked to clerkId ${byEmail.clerkId}; refusing to re-link to ${clerkUserId}`
+      );
+      throw new Error("Email already linked to a different Clerk user");
+    }
+    const adopted = await prisma.user.update({
+      where: { id: byEmail.id },
+      data: { clerkId: clerkUserId },
+      select: { id: true },
+    });
+    return adopted.id;
+  }
+
   try {
     const created = await prisma.user.create({
       data: {
         clerkId: clerkUserId,
         email,
         displayName,
+        derivedDisplayName: displayName,
         igVerifyCode: generateIgVerifyCode(),
       },
       select: { id: true },
@@ -72,15 +98,25 @@ async function resolveLocalUser(clerkUserId: string): Promise<number> {
       });
       if (after) return after.id;
     }
-    // Pre-existing local row for this email (seed data, or a user that
-    // existed before Clerk was wired in). Adopt it by stamping clerkId.
+    // Race on email: re-check ownership and only adopt if still unlinked.
     if (isUniqueViolationOn(err, ["email"])) {
-      const adopted = await prisma.user.update({
+      const raced = await prisma.user.findUnique({
         where: { email },
-        data: { clerkId: clerkUserId },
-        select: { id: true },
+        select: { id: true, clerkId: true },
       });
-      return adopted.id;
+      if (raced && raced.clerkId === clerkUserId) return raced.id;
+      if (raced && raced.clerkId === null) {
+        const adopted = await prisma.user.update({
+          where: { id: raced.id },
+          data: { clerkId: clerkUserId },
+          select: { id: true },
+        });
+        return adopted.id;
+      }
+      console.error(
+        `resolveLocalUser: email ${email} raced into a row linked to ${raced?.clerkId ?? "unknown"}; refusing to re-link to ${clerkUserId}`
+      );
+      throw new Error("Email already linked to a different Clerk user");
     }
     console.error("resolveLocalUser create failed:", err);
     throw err;
